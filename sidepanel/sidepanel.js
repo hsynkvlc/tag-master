@@ -115,6 +115,7 @@ const elements = {
   copyJsVar: document.getElementById('copyJsVar'),
   saveAsSnippet: document.getElementById('saveAsSnippet'),
   triggerSuggestions: document.getElementById('triggerSuggestions'),
+  triggerList: document.getElementById('triggerList'),
   // Cookies
   refreshCookies: document.getElementById('refreshCookies'),
   cookieList: document.getElementById('cookieList'),
@@ -275,7 +276,10 @@ elements.tabs.forEach(tab => {
     if (tabName === 'network') renderNetworkRequests();
     if (tabName === 'consent') loadConsentState();
     if (tabName === 'cookies') refreshCookies();
-    if (tabName === 'push') renderSnippets();
+    if (tabName === 'push') {
+      renderSnippets();
+      renderSavedTriggers();
+    }
     if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
     if (tabName === 'about') verifyElements();
   });
@@ -878,11 +882,21 @@ chrome.runtime.onMessage.addListener((message) => {
       desc: 'Hierarchical path'
     });
 
-    triggerHtml += suggestions.map(s => `
+    triggerHtml += suggestions.map((s, idx) => `
       <div style="background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:4px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">
           <span style="font-weight:bold;color:var(--google-blue)">${s.type}</span>
-          <span style="font-size:9px;color:var(--text-muted)">${s.desc}</span>
+          <div style="display:flex;gap:4px;align-items:center">
+             <span style="font-size:9px;color:var(--text-muted)">${s.desc}</span>
+             <button class="btn-icon btn-small save-trigger-btn" 
+                     data-id="${Date.now() + idx}" 
+                     data-type="${s.type}" 
+                     data-condition="${s.condition}" 
+                     data-value="${s.value.replace(/"/g, '&quot;')}" 
+                     title="Save to Library">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+             </button>
+          </div>
         </div>
         <div style="font-size:10px;margin-bottom:4px">Condition: <span style="color:var(--text-secondary)">${s.condition}</span></div>
         <div style="font-family:monospace;background:var(--bg-primary);padding:4px;border-radius:2px;word-break:break-all">${s.value}</div>
@@ -892,6 +906,20 @@ chrome.runtime.onMessage.addListener((message) => {
 
     if (elements.triggerSuggestions) {
       elements.triggerSuggestions.innerHTML = triggerHtml;
+
+      // Attach save listeners
+      elements.triggerSuggestions.querySelectorAll('.save-trigger-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const trigger = {
+            id: btn.dataset.id,
+            type: btn.dataset.type,
+            condition: btn.dataset.condition,
+            value: btn.dataset.value,
+            timestamp: Date.now()
+          };
+          await saveTrigger(trigger);
+        });
+      });
     }
 
     // 2. Generate Code
@@ -1404,6 +1432,64 @@ async function renderSnippets() {
   });
 }
 
+// ============================================
+// Professional Features: Trigger Library
+// ============================================
+async function saveTrigger(trigger) {
+  const name = prompt('Enter a name for this trigger:', `${trigger.type}: ${trigger.value.substring(0, 15)}...`);
+  if (!name) return;
+
+  trigger.name = name;
+  const stored = await chrome.storage.local.get('saved_triggers');
+  const triggers = stored.saved_triggers || [];
+  triggers.push(trigger);
+  await chrome.storage.local.set({ 'saved_triggers': triggers });
+
+  showToast('Trigger saved to library!', 'success');
+  renderSavedTriggers();
+}
+
+async function renderSavedTriggers() {
+  if (!elements.triggerList) return;
+
+  const stored = await chrome.storage.local.get('saved_triggers');
+  const triggers = stored.saved_triggers || [];
+
+  if (triggers.length === 0) {
+    elements.triggerList.innerHTML = '<div class="empty-state"><p>No saved triggers yet</p></div>';
+    return;
+  }
+
+  elements.triggerList.innerHTML = triggers.map(t => `
+    <div class="container-item" style="padding: 10px; flex-direction: column; align-items: flex-start; gap: 4px">
+      <div style="width: 100%; display: flex; justify-content: space-between; align-items: center">
+        <div style="font-weight: 600; font-size: 11px; color: var(--accent-blue)">${t.name}</div>
+        <button class="btn-icon btn-small delete-trigger" data-id="${t.id}" title="Delete Trigger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;color:var(--error-red)"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+      <div style="font-size: 10px; color: var(--text-muted)">
+        ${t.type} <span style="margin: 0 4px">→</span> ${t.condition}
+      </div>
+      <div style="font-family: monospace; font-size: 9px; background: var(--bg-hover); padding: 4px; border-radius: 4px; width: 100%; word-break: break-all; color: var(--text-secondary)">
+        ${t.value}
+      </div>
+    </div>
+  `).join('');
+
+  elements.triggerList.querySelectorAll('.delete-trigger').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const stored = await chrome.storage.local.get('saved_triggers');
+      const triggers = (stored.saved_triggers || []).filter(t => t.id !== id);
+      await chrome.storage.local.set({ 'saved_triggers': triggers });
+      renderSavedTriggers();
+      showToast('Trigger deleted');
+    });
+  });
+}
+
 // Update tab navigation to trigger renders
 // GA4 Session Info Update Logic
 
@@ -1426,4 +1512,5 @@ document.addEventListener('DOMContentLoaded', () => {
   checkBlockGA4State();
   getCurrentTab();
   loadSessionInfo();
+  renderSavedTriggers();
 });
