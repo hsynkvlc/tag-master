@@ -11,7 +11,15 @@
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo edit hsynkvlc/google-swiss-knife --visibility private)",
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo edit hsynkvlc/google-swiss-knife --visibility private --accept-visibility-change-consequences)",
       "Bash(powershell -Command:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Swiss Knife for Google Chrome Extension \\(Phase 1\\)\n\nFeatures implemented:\n- GTM Quick Injector with validation and recent IDs\n- DataLayer Monitor with real-time event capture\n- DataLayer Injector with preset templates\n- Network Monitor for Google requests \\(GA4, UA, Ads, Floodlight, GTM\\)\n- Google Ads Inspector with Enhanced Conversions validation\n- Cookie Inspector for Google marketing cookies\n- Code Runner for executing JS in page context\n- DevTools Panel with full debugging interface\n- Side Panel for quick access\n- Background service worker with IndexedDB storage\n- Session persistence across page reloads\n\nSupported Google products:\n- Google Tag Manager \\(GTM\\)\n- Google Analytics 4 \\(GA4\\)\n- Universal Analytics \\(UA\\)\n- Google Ads Conversion Tracking\n- Google Ads Remarketing\n- Enhanced Conversions\n- Floodlight Tags\n- DoubleClick\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(npm search:*)",
+      "Bash(npx playwright:*)",
+      "Bash(node tests/extension.test.js:*)",
+      "Bash(npm init:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd Playwright tests and package.json\n\n- Added extension.test.js with automated tests\n- GTM injection test\n- DataLayer push/capture test\n- GA4 URL parsing test\n- npm package.json with Playwright dependency\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
