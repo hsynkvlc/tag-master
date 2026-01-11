@@ -9,9 +9,9 @@ import { generateId, identifyGoogleRequest, formatTimestamp, isGoogleRequest } f
 // ============================================
 // State Management
 // ============================================
-let currentSession = null;
-let networkRequests = [];
-let dataLayerEvents = [];
+let tabSessions = {}; // Stores GA4 session info per tab
+let tabEvents = {}; // Stores DataLayer events per tab { tabId: [] }
+let tabRequests = {}; // Stores Network requests per tab { tabId: [] }
 let settings = { ...DEFAULT_SETTINGS };
 
 // ============================================
@@ -150,68 +150,64 @@ async function startSession() {
   return currentSession;
 }
 
-async function updateSession(updates) {
-  if (!currentSession) return;
-  Object.assign(currentSession, updates);
-  await dbPut('sessions', currentSession);
-}
-
-async function getSession() {
-  if (!currentSession) {
-    await startSession();
-  }
-  return currentSession;
-}
+// DEPRECATED currentSession logic removed for tab-specific approach
+// Keeping functions for DB compatibility if needed later
 
 // ============================================
 // Network Request Handling
 // ============================================
 function captureNetworkRequest(details) {
   const googleType = identifyGoogleRequest(details.url);
-
   if (!googleType) return;
+
+  const urlObj = new URL(details.url);
+  const ecValidation = googleType.type === 'GOOGLE_ADS_CONVERSION' ? validateEnhancedConversions(Object.fromEntries(urlObj.searchParams)) : null;
 
   const request = {
     id: generateId(),
-    sessionId: currentSession?.id,
     timestamp: Date.now(),
     type: googleType.type,
     typeName: googleType.name,
     typeColor: googleType.color,
+    isServerSide: googleType.isServerSide,
+    hasEnhancedConversions: ecValidation?.detected || false,
+    ecValidation: ecValidation,
     url: details.url,
     method: details.method,
-    tabId: details.tabId,
-    frameId: details.frameId,
-    initiator: details.initiator,
-    requestHeaders: details.requestHeaders,
-    statusCode: null,
-    responseHeaders: null,
-    size: 0,
-    timing: {
-      startTime: details.timeStamp
-    }
+    tabId: details.tabId
   };
 
-  networkRequests.push(request);
+  if (!tabRequests[details.tabId]) tabRequests[details.tabId] = [];
+  tabRequests[details.tabId].push(request);
+  if (tabRequests[details.tabId].length > 300) tabRequests[details.tabId].shift();
 
-  // Store in IndexedDB
+  // Extract GA4 Session Info
+  if (googleType.type === 'GA4' || googleType.type === 'GA4_SERVER_SIDE') {
+    const tid = urlObj.searchParams.get('tid');
+    const cid = urlObj.searchParams.get('cid');
+    const sid = urlObj.searchParams.get('sid');
+    if (tid || cid || sid) {
+      tabSessions[details.tabId] = {
+        ...(tabSessions[details.tabId] || {}),
+        ...(tid && { tid }),
+        ...(cid && { cid }),
+        ...(sid && { sid }),
+        lastUpdate: Date.now()
+      };
+
+      broadcastMessage({
+        type: 'GA4_SESSION_UPDATE',
+        tabId: details.tabId,
+        data: tabSessions[details.tabId]
+      });
+    }
+  }
+
+  broadcastMessage({ type: MESSAGE_TYPES.NETWORK_REQUEST, data: request });
+
   if (db && settings.preserveLog) {
-    dbAdd('networkRequests', request).catch(console.error);
+    dbAdd('networkRequests', request).catch(() => { });
   }
-
-  // Update session
-  if (currentSession) {
-    currentSession.requestCount++;
-    updateSession({ requestCount: currentSession.requestCount });
-  }
-
-  // Broadcast to UI
-  broadcastMessage({
-    type: MESSAGE_TYPES.NETWORK_REQUEST,
-    data: request
-  });
-
-  return request.id;
 }
 
 function updateNetworkRequest(requestId, updates) {
@@ -228,35 +224,27 @@ function updateNetworkRequest(requestId, updates) {
 // DataLayer Event Handling
 // ============================================
 async function handleDataLayerEvent(event, sender) {
+  const tabId = sender.tab?.id;
+  if (!tabId) return;
+
   const dataLayerEvent = {
     id: generateId(),
-    sessionId: currentSession?.id,
     timestamp: Date.now(),
     pageUrl: sender.tab?.url || event.pageUrl,
-    tabId: sender.tab?.id,
+    tabId: tabId,
     event: event.eventName,
     data: event.data
   };
 
-  dataLayerEvents.push(dataLayerEvent);
+  if (!tabEvents[tabId]) tabEvents[tabId] = [];
+  tabEvents[tabId].push(dataLayerEvent);
+  if (tabEvents[tabId].length > 300) tabEvents[tabId].shift();
 
-  // Store in IndexedDB
+  broadcastMessage({ type: MESSAGE_TYPES.DATALAYER_PUSH, data: dataLayerEvent });
+
   if (db && settings.preserveLog) {
-    await dbAdd('dataLayerEvents', dataLayerEvent);
+    dbAdd('dataLayerEvents', dataLayerEvent).catch(() => { });
   }
-
-  // Update session
-  if (currentSession) {
-    currentSession.eventCount++;
-    await updateSession({ eventCount: currentSession.eventCount });
-  }
-
-  // Broadcast to UI
-  broadcastMessage({
-    type: MESSAGE_TYPES.DATALAYER_PUSH,
-    data: dataLayerEvent
-  });
-
   return dataLayerEvent;
 }
 
@@ -325,32 +313,31 @@ async function handleMessage(message, sender) {
       return await handleDataLayerEvent(message.data, sender);
 
     case MESSAGE_TYPES.DATALAYER_GET:
-      return dataLayerEvents.filter(e =>
-        !message.tabId || e.tabId === message.tabId
-      );
+      const [dlTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return dlTab ? (tabEvents[dlTab.id] || []) : [];
 
     case MESSAGE_TYPES.DATALAYER_CLEAR:
-      dataLayerEvents = [];
+      const [clTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (clTab) tabEvents[clTab.id] = [];
       if (db) await dbClear('dataLayerEvents');
       return { success: true };
 
-    // Network Messages
-    case MESSAGE_TYPES.NETWORK_GET:
-      return networkRequests.filter(r =>
-        !message.tabId || r.tabId === message.tabId
-      );
+    case 'NETWORK_GET':
+      const [ntTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return ntTab ? (tabRequests[ntTab.id] || []) : [];
 
-    case MESSAGE_TYPES.NETWORK_CLEAR:
-      networkRequests = [];
+    case 'NETWORK_CLEAR':
+      const [cnTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (cnTab) tabRequests[cnTab.id] = [];
       if (db) await dbClear('networkRequests');
       return { success: true };
 
     // Session Messages
     case MESSAGE_TYPES.SESSION_GET:
-      return await getSession();
+      return { id: 'tab-session', tabSessions };
 
     case MESSAGE_TYPES.SESSION_START:
-      return await startSession();
+      return { success: true };
 
     // Settings Messages
     case MESSAGE_TYPES.SETTINGS_GET:
@@ -384,11 +371,17 @@ async function handleMessage(message, sender) {
     case MESSAGE_TYPES.GTM_DETECT:
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (activeTab) {
-        return await chrome.tabs.sendMessage(activeTab.id, {
-          type: MESSAGE_TYPES.GTM_DETECT
-        });
+        try {
+          return await chrome.tabs.sendMessage(activeTab.id, {
+            type: MESSAGE_TYPES.GTM_DETECT
+          }, { frameId: 0 });
+        } catch (e) {
+          // Fallback or ignore if main frame is not accessible (e.g. restricted URL)
+          console.warn('Failed to detect in main frame', e);
+          return [];
+        }
       }
-      return { containers: [] };
+      return [];
 
     // Tab Messages
     case MESSAGE_TYPES.TAB_GET:
@@ -397,11 +390,35 @@ async function handleMessage(message, sender) {
 
     // Cookies Messages
     case MESSAGE_TYPES.COOKIES_GET:
-      return await chrome.cookies.getAll({ url: message.url });
+      let targetUrl = message.url;
+      if (!targetUrl) {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        targetUrl = tab?.url;
+      }
+      if (!targetUrl) return [];
+
+      const allCookies = await chrome.cookies.getAll({ url: targetUrl });
+      // Identify Google cookies
+      return allCookies.filter(c =>
+        c.name.startsWith('_ga') ||
+        c.name.startsWith('_gid') ||
+        c.name.startsWith('_gcl') ||
+        c.name.includes('gac') ||
+        c.name.includes('FPID') ||
+        c.domain.includes('google.com') ||
+        c.domain.includes('doubleclick.net')
+      ).sort((a, b) => a.name.localeCompare(b.name));
 
     case MESSAGE_TYPES.COOKIES_DELETE:
+      let deleteUrl = message.url;
+      if (!deleteUrl) {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        deleteUrl = tab?.url;
+      }
+      if (!deleteUrl) return { success: false };
+
       await chrome.cookies.remove({
-        url: message.url,
+        url: deleteUrl,
         name: message.name
       });
       return { success: true };
@@ -416,6 +433,25 @@ async function handleMessage(message, sender) {
         });
       }
       return { error: 'No active tab' };
+
+    case 'CONSENT_GET':
+      const [consentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (consentTab) {
+        try {
+          // Forward to page script via content script
+          const result = await chrome.tabs.sendMessage(consentTab.id, {
+            type: 'GET_CONSENT_STATE'
+          });
+          return result || { error: 'No consent data' };
+        } catch (e) {
+          return { error: 'Failed to access tab' };
+        }
+      }
+      return { error: 'No active tab' };
+
+    case 'GA4_SESSION_GET':
+      const [sessionTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return sessionTab ? (tabSessions[sessionTab.id] || null) : null;
 
     default:
       console.warn('[Swiss Knife] Unknown message type:', message.type);
@@ -478,9 +514,27 @@ chrome.webRequest.onErrorOccurred.addListener(
 // ============================================
 // Tab Navigation Handling
 // ============================================
+chrome.webNavigation.onCommitted.addListener(async (details) => {
+  if (details.frameId === 0) {
+    // Clear data for this tab on refresh to avoid duplicates
+    // We do this at onCommitted (earliest point for new document)
+    dataLayerEvents = dataLayerEvents.filter(e => e.tabId !== details.tabId);
+    networkRequests = networkRequests.filter(r => r.tabId !== details.tabId);
+
+    if (currentSession) {
+      // Main frame navigation committed
+      // Note: We update session stats on completed for accuracy, 
+      // but we broadcast TAB_UPDATED here for UI responsiveness
+      broadcastMessage({
+        type: MESSAGE_TYPES.TAB_UPDATED,
+        data: { url: details.url, tabId: details.tabId }
+      });
+    }
+  }
+});
+
 chrome.webNavigation.onCompleted.addListener(async (details) => {
   if (details.frameId === 0 && currentSession) {
-    // Main frame navigation completed
     currentSession.pageCount++;
     currentSession.pages.push({
       url: details.url,
@@ -489,11 +543,6 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
     await updateSession({
       pageCount: currentSession.pageCount,
       pages: currentSession.pages
-    });
-
-    broadcastMessage({
-      type: MESSAGE_TYPES.TAB_UPDATED,
-      data: { url: details.url, tabId: details.tabId }
     });
   }
 });
@@ -528,5 +577,5 @@ const KEEP_ALIVE_INTERVAL = 20000; // 20 seconds
 
 setInterval(() => {
   // Ping to keep alive
-  chrome.runtime.getPlatformInfo(() => {});
+  chrome.runtime.getPlatformInfo(() => { });
 }, KEEP_ALIVE_INTERVAL);

@@ -1,120 +1,264 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Swiss Knife for Google</title>
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <div id="app" class="app">
     <!-- Header -->
     <header class="header">
       <div class="header-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14.5 2L4 12.5V18h5.5L20 7.5c.83-.83.83-2.17 0-3L17 1.5c-.83-.83-2.17-.83-3 0l-.5.5z"/>
+          <path d="M14.5 2L4 12.5V18h5.5L20 7.5c.83-.83.83-2.17 0-3L17 1.5c-.83-.83-2.17-.83-3 0l-.5.5z" />
         </svg>
         <span>Swiss Knife for Google</span>
       </div>
       <div class="header-actions">
-        <button class="btn-icon" id="settingsBtn" title="Settings">
+        <button class="btn-icon" id="themeToggle" title="Toggle Light/Dark Mode">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            style="width:16px;height:16px;display:none">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            style="width:16px;height:16px">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+        <button class="btn-icon" id="openSettings" title="Settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
           </svg>
         </button>
       </div>
     </header>
+    <!-- Session Deep Dive Status Bar -->
+    <div id="sessionDeepDive" class="session-bar" style="display:none">
+      <div class="session-item" title="Measurement ID">
+        <span class="label">TID:</span>
+        <span id="deepTid" class="value">-</span>
+      </div>
+      <div class="session-item" title="Session ID">
+        <span class="label">SID:</span>
+        <span id="deepSid" class="value">-</span>
+      </div>
+      <div class="session-item" title="Client ID">
+        <span class="label">CID:</span>
+        <span id="deepCid" class="value">-</span>
+      </div>
+    </div>
 
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="gtm">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-          <line x1="7" y1="7" x2="7.01" y2="7"/>
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+          <line x1="7" y1="7" x2="7.01" y2="7" />
         </svg>
         <span>GTM</span>
       </button>
       <button class="tab" data-tab="monitor">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-          <polyline points="2 17 12 22 22 17"/>
-          <polyline points="2 12 12 17 22 12"/>
+          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+          <polyline points="2 17 12 22 22 17" />
+          <polyline points="2 12 12 17 22 12" />
         </svg>
-        <span>Monitor</span>
+        <span>Events</span>
+      </button>
+      <button class="tab" data-tab="network">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+        </svg>
+        <span>Network</span>
+      </button>
+      <button class="tab" data-tab="audit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+        <span>Audit</span>
+      </button>
+      <button class="tab" data-tab="cookies">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2a10 10 0 0 1 10 10" />
+          <path d="M12 22a10 10 0 0 1-10-10" />
+          <path d="M16 8v0" />
+          <path d="M9 12v0" />
+          <path d="M14 15v0" />
+        </svg>
+        <span>Cookies</span>
       </button>
       <button class="tab" data-tab="push">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="22" y1="2" x2="11" y2="13"/>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          <line x1="22" y1="2" x2="11" y2="13" />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
-        <span>Push</span>
+        <span>Tools</span>
       </button>
     </div>
 
     <!-- Content -->
     <div class="content">
-      <!-- GTM Panel -->
+      <!-- GTM Injector Panel -->
       <div class="panel active" id="panel-gtm">
         <div class="section">
-          <div class="section-title">Inject GTM Container</div>
-          <div class="input-group">
-            <input type="text" class="input" id="gtmIdInput" placeholder="GTM-XXXXXX">
-            <button class="btn" id="injectBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              Inject
-            </button>
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+            </svg>
+            GTM Environment Injector
           </div>
-          <div class="checkbox-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="initDataLayer" checked>
-              Initialize dataLayer
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="overrideExisting">
-              Replace existing
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="previewMode">
-              Preview mode
-            </label>
+          <div class="container-item" style="flex-direction:column;gap:12px;padding:12px">
+            <div style="width:100%">
+              <div
+                style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">
+                Container ID</div>
+              <input type="text" class="input" id="gtmIdInput" placeholder="GTM-XXXXXXX" />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
+              <label class="checkbox-container">
+                <input type="checkbox" id="initDataLayer" checked>
+                <span class="checkbox-label">Init DataLayer</span>
+              </label>
+              <label class="checkbox-container">
+                <input type="checkbox" id="overrideExisting">
+                <span class="checkbox-label">Persistent</span>
+              </label>
+              <label class="checkbox-container">
+                <input type="checkbox" id="previewMode">
+                <span class="checkbox-label">Preview Mode</span>
+              </label>
+            </div>
+            <button class="btn" id="injectBtn" style="width:100%;gap:8px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:14px;height:14px">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Inject GTM Container
+            </button>
           </div>
         </div>
 
         <div class="section">
-          <div class="section-title">Recent</div>
-          <div class="recent-list" id="recentList">
-            <!-- Recent GTM IDs will be added here -->
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+              <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
+            Recent IDs
           </div>
+          <div id="recentList" class="recent-list"></div>
+        </div>
+
+        <div class="section" id="injectedSection" style="display:none">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Active Injections
+          </div>
+          <div id="injectedList" class="container-list"></div>
         </div>
 
         <div class="section">
-          <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-            <span>Detected Containers</span>
-            <button class="btn-icon btn-small" id="refreshContainers">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                <polyline points="23 4 23 10 17 10"/>
-                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <path
+                  d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                </path>
+              </svg>
+              Detected Containers
+            </div>
+            <button class="btn-icon" id="refreshContainers" title="Refresh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
               </svg>
             </button>
           </div>
-          <div class="container-list" id="containerList">
-            <!-- Containers will be added here -->
+          <div id="containerList" class="container-list">
+            <div class="empty-state">
+              <p>Scanning for GTM/GA4 containers...</p>
+            </div>
           </div>
+        </div>
+
+        <div style="margin-top:auto;padding:16px;text-align:center">
+          <a href="#" id="mainSupportLink"
+            style="font-size:11px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              style="width:12px;height:12px;color:#FFDD00">
+              <path
+                d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+              </path>
+            </svg>
+            Support the Project
+          </a>
         </div>
       </div>
 
-      <!-- Monitor Panel -->
+      <!-- Monitor Panel (DataLayer) -->
       <div class="panel" id="panel-monitor">
         <div class="section">
+          <div class="section-title"
+            style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+              DataLayer Events
+            </div>
+            <div style="display:flex;gap:4px">
+              <button class="btn-icon" id="exportJson" title="Export as JSON">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </button>
+              <button class="btn-icon" id="exportCsv" title="Export as CSV">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="16" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+              </button>
+            </div>
+          </div>
           <div style="display:flex;gap:8px;margin-bottom:12px">
             <input type="text" class="input" id="eventFilter" placeholder="Filter events..." style="flex:1">
             <button class="btn btn-secondary" id="clearEvents">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:14px;height:14px">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
             </button>
           </div>
@@ -124,10 +268,251 @@
         </div>
       </div>
 
-      <!-- Push Panel -->
+      <!-- Network Panel -->
+      <div class="panel" id="panel-network">
+        <div class="section">
+          <div class="section-title"
+            style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"></path>
+              </svg>
+              Google Requests Only
+            </div>
+            <button class="btn btn-secondary" id="clearNetwork">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:14px;height:14px">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
+            </button>
+          </div>
+          <div class="event-list" id="networkList">
+            <!-- Network requests will be added here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Audit Panel -->
+      <div class="panel" id="panel-audit">
+        <div class="section">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Martech Compliance Audit
+          </div>
+          <button class="btn" id="runAudit" style="width:100%;margin-bottom:12px;gap:8px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            Run Deep Scan
+          </button>
+          <div id="auditResults" class="container-list">
+            <div class="empty-state">
+              <p>Click "Run Scan" to check implementation status</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cookies Panel -->
+      <div class="panel" id="panel-cookies">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 2a10 10 0 0 1 10 10"></path>
+                <path d="M12 22a10 10 0 0 1-10-10"></path>
+              </svg>
+              Tracking Cookies
+            </div>
+            <button class="btn-icon" id="refreshCookies" title="Refresh Cookies">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+          </div>
+          <div id="cookieList" class="container-list">
+            <!-- Cookies will be added here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools Panel -->
       <div class="panel" id="panel-push">
         <div class="section">
-          <div class="section-title">Quick Presets</div>
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            Snippets Library
+          </div>
+          <div class="container-list" id="snippetList">
+            <!-- Snippets will be added here -->
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <path
+                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+              </path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            GTM Variable Builder
+          </div>
+          <div class="container-list">
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <button class="btn btn-secondary" id="pickElementBtn" style="flex:1;gap:6px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <path d="M15 18l-2-2 2-2m-5-4l2-2-2-2M2 3h20v18H2V3z"></path>
+                </svg>
+                Pick Element
+              </button>
+              <button class="btn btn-secondary" id="captureHighlightBtn" style="flex:1;gap:6px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                </svg>
+                From Highlight
+              </button>
+            </div>
+
+            <div id="selectorResult"
+              style="display:none;padding:12px;border:1px solid rgba(14, 99, 156, 0.3);background:rgba(14, 99, 156, 0.05);border-radius:10px;margin-top:12px">
+              <div
+                style="font-size:12px;font-weight:700;color:var(--success-green);display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                <div
+                  style="background:var(--success-green);width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                    style="width:10px;height:10px">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                Element Successfully Captured
+              </div>
+
+              <div class="container-item"
+                style="flex-direction:column;align-items:flex-start;padding:10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;margin-bottom:12px">
+                <div
+                  style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="width:10px;height:10px">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  CSS Selector Path
+                </div>
+                <div
+                  style="font-family:'JetBrains Mono', 'Consolas', monospace;font-size:11px;word-break:break-all;color:var(--accent-blue)"
+                  id="pickedSelector">-</div>
+              </div>
+
+              <div
+                style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);display:flex;align-items:center;gap:6px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:12px;height:12px">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                1. Test Code (Verify Value)
+              </div>
+              <div style="position:relative;margin-bottom:8px">
+                <pre class="code-block" id="pickedJsTest"
+                  style="font-size:10px;background:var(--bg-secondary);padding:10px 40px 10px 10px;white-space:pre-wrap;word-break:break-all;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);border-left:4px solid var(--text-muted)">console.log((function(){ ... })())</pre>
+                <div style="position:absolute;top:6px;right:6px;display:flex;flex-direction:column;gap:4px">
+                  <button class="btn-icon btn-small" id="runJsTest" title="Execute & Preview"
+                    style="background:var(--bg-primary);padding:4px;border-radius:4px;border:1px solid var(--border);color:var(--success-green);box-shadow:0 2px 4px rgba(0,0,0,0.1)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                      style="width:12px;height:12px">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  </button>
+                  <button class="btn-icon btn-small" id="copyJsTest" title="Copy for Console"
+                    style="background:var(--bg-primary);padding:4px;border-radius:4px;border:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.1)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      style="width:12px;height:12px">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div id="testResultArea"
+                style="display:none;margin-bottom:16px;padding:10px;background:var(--bg-console);border:1px solid var(--accent-blue);border-radius:6px;font-family:monospace;font-size:11px;border-left:4px solid var(--accent-blue)">
+                <div
+                  style="font-size:9px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;display:flex;align-items:center;gap:4px">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="width:10px;height:10px">
+                    <polyline points="16 18 22 12 16 6"></polyline>
+                    <polyline points="8 6 2 12 8 18"></polyline>
+                  </svg>
+                  Console Output Preview
+                </div>
+                <div style="display:flex;gap:6px">
+                  <span style="color:var(--text-muted)">Value:</span>
+                  <span id="testResultValue"
+                    style="color:var(--success-green);word-break:break-all;font-weight:600">-</span>
+                </div>
+              </div>
+
+              <div
+                style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);display:flex;align-items:center;gap:6px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:12px;height:12px">
+                  <path
+                    d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" />
+                </svg>
+                2. GTM Custom JS Variable
+              </div>
+              <div style="position:relative;margin-bottom:12px">
+                <pre class="code-block" id="pickedJsVar"
+                  style="font-size:10px;background:var(--bg-surface);padding:10px 40px 10px 10px;white-space:pre-wrap;word-break:break-all;border:1px solid var(--border);border-radius:6px;color:var(--accent-blue);border-left:4px solid var(--accent-blue)">function() { ... }</pre>
+                <button class="btn-icon btn-small" id="copyJsVar" title="Copy for GTM"
+                  style="position:absolute;top:6px;right:6px;background:var(--bg-primary);padding:4px;border-radius:4px;border:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.1)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="width:12px;height:12px">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                </button>
+              </div>
+
+              <button class="btn btn-secondary" id="saveAsSnippet"
+                style="width:100%;gap:6px;background:rgba(14, 99, 156, 0.1);color:var(--accent-blue);border:1px dashed var(--accent-blue)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Save as Snippet
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            Quick Presets
+          </div>
           <div class="preset-buttons" id="presetButtons">
             <button class="preset-btn" data-preset="page_view">Page View</button>
             <button class="preset-btn" data-preset="purchase">Purchase</button>
@@ -137,18 +522,80 @@
             <button class="preset-btn" data-preset="sign_up">Sign Up</button>
           </div>
         </div>
+
         <div class="section">
-          <div class="section-title">Event Data</div>
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            Event Data (JSON)
+          </div>
           <textarea class="json-editor" id="jsonEditor" spellcheck="false"></textarea>
           <div id="jsonError" style="color:var(--error-red);font-size:11px;margin-top:6px;display:none"></div>
         </div>
-        <button class="btn" id="pushBtn" style="width:100%">
+
+        <button class="btn" id="pushBtn" style="width:100%;gap:8px">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-            <line x1="22" y1="2" x2="11" y2="13"/>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
           Push to dataLayer
         </button>
+      </div>
+
+      <!-- About Panel -->
+      <div class="panel" id="panel-about">
+        <div class="section" style="text-align:center;padding:12px 10px">
+          <div
+            style="width:56px;height:56px;background:var(--bg-surface);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;border:1px solid var(--border);box-shadow:0 4px 12px rgba(0,0,0,0.1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              style="width:28px;height:28px;color:var(--google-blue)">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+            </svg>
+          </div>
+          <h2 style="font-size:16px;margin-bottom:6px;color:var(--text-primary)">Swiss Knife for Google</h2>
+          <p style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:20px">
+            Professional toolkit for GTM Experts & Marketing Analysts.
+          </p>
+
+          <!-- Support Card for Maximum Conversion -->
+          <div
+            style="background:linear-gradient(135deg, rgba(14, 99, 156, 0.15) 0%, rgba(78, 201, 176, 0.15) 100%);padding:16px;border-radius:12px;border:1px solid rgba(14, 99, 156, 0.3);margin-bottom:20px;text-align:left">
+            <div
+              style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-primary);display:flex;align-items:center;gap:6px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:14px;height:14px;color:#FFDD00">
+                <path
+                  d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                </path>
+              </svg>
+              Support the Project
+            </div>
+            <p style="font-size:10.5px;color:var(--text-secondary);line-height:1.4;margin-bottom:12px">
+              Your support directly fuels new features and constant updates for this extension.
+            </p>
+            <a href="https://www.buymeacoffee.com/yourprofile" target="_blank" class="btn"
+              style="background:#FFDD00;color:#000000;border:none;font-weight:700;width:100%;justify-content:center;gap:8px;text-decoration:none;padding:10px;font-size:12px;display:flex;align-items:center;border-radius:6px">
+              <span style="font-size:16px">☕</span> Buy me a coffee
+            </a>
+          </div>
+
+          <!-- Developer Info -->
+          <div style="display:flex;flex-direction:column;gap:8px;text-align:left">
+            <div
+              style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--bg-surface);border-radius:8px;border:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:8px;height:8px;background:var(--success-green);border-radius:50%"></div>
+                <div style="font-size:11px;font-weight:600">v1.2.0 (Stable)</div>
+              </div>
+              <a href="#" style="font-size:10px;color:var(--accent-blue);text-decoration:none">Changelog</a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -158,7 +605,8 @@
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText">Active</span>
       </div>
-      <div class="status-item" id="currentUrl" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+      <div class="status-item" id="currentUrl"
+        style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         Loading...
       </div>
     </div>
@@ -169,4 +617,5 @@
 
   <script src="sidepanel.js"></script>
 </body>
+
 </html>

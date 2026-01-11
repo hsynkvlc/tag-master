@@ -11,7 +11,9 @@ const MESSAGE_TYPES = {
   DATALAYER_CLEAR: 'DATALAYER_CLEAR',
   GTM_INJECT: 'GTM_INJECT',
   GTM_DETECT: 'GTM_DETECT',
-  TAB_UPDATED: 'TAB_UPDATED'
+  TAB_UPDATED: 'TAB_UPDATED',
+  CODE_EXECUTE: 'CODE_EXECUTE',
+  CODE_RESULT: 'CODE_RESULT'
 };
 
 const PRESETS = {
@@ -48,7 +50,11 @@ const PRESETS = {
 // ============================================
 // State
 // ============================================
+// ============================================
+// State
+// ============================================
 let events = [];
+let networkRequests = [];
 let currentTab = 'gtm';
 
 // ============================================
@@ -68,13 +74,147 @@ const elements = {
   eventFilter: document.getElementById('eventFilter'),
   clearEvents: document.getElementById('clearEvents'),
   eventList: document.getElementById('eventList'),
+  // Network Elements
+  clearNetwork: document.getElementById('clearNetwork'),
+  networkList: document.getElementById('networkList'),
+
+  // Injected Elements
+  injectedSection: document.getElementById('injectedSection'),
+  injectedList: document.getElementById('injectedList'),
+
   presetButtons: document.getElementById('presetButtons'),
   jsonEditor: document.getElementById('jsonEditor'),
   jsonError: document.getElementById('jsonError'),
   pushBtn: document.getElementById('pushBtn'),
   currentUrl: document.getElementById('currentUrl'),
-  toast: document.getElementById('toast')
+  toast: document.getElementById('toast'),
+  // Session Deep Dive
+  sessionBar: document.getElementById('sessionDeepDive'),
+  deepTid: document.getElementById('deepTid'),
+  deepSid: document.getElementById('deepSid'),
+  deepCid: document.getElementById('deepCid'),
+  // Export
+  exportJson: document.getElementById('exportJson'),
+  exportCsv: document.getElementById('exportCsv'),
+  // Audit
+  runAudit: document.getElementById('runAudit'),
+  auditResults: document.getElementById('auditResults'),
+  // Snippets
+  snippetList: document.getElementById('snippetList'),
+  // Element Picker
+  pickElementBtn: document.getElementById('pickElementBtn'),
+  captureHighlightBtn: document.getElementById('captureHighlightBtn'),
+  selectorResult: document.getElementById('selectorResult'),
+  pickedSelector: document.getElementById('pickedSelector'),
+  pickedJsTest: document.getElementById('pickedJsTest'),
+  copyJsTest: document.getElementById('copyJsTest'),
+  runJsTest: document.getElementById('runJsTest'),
+  testResultArea: document.getElementById('testResultArea'),
+  testResultValue: document.getElementById('testResultValue'),
+  pickedJsVar: document.getElementById('pickedJsVar'),
+  copyJsVar: document.getElementById('copyJsVar'),
+  saveAsSnippet: document.getElementById('saveAsSnippet'),
+  // Cookies
+  refreshCookies: document.getElementById('refreshCookies'),
+  cookieList: document.getElementById('cookieList'),
+  // Theme
+  themeToggle: document.getElementById('themeToggle'),
+  // Support Link
+  mainSupportLink: document.getElementById('mainSupportLink')
 };
+
+// Re-verify elements in case some were late-loaded or moved
+function verifyElements() {
+  for (const key in elements) {
+    if (!elements[key]) {
+      elements[key] = document.getElementById(key);
+    }
+  }
+}
+
+// ============================================
+// Theme Management
+// ============================================
+async function initTheme() {
+  const stored = await chrome.storage.local.get('theme');
+  const theme = stored.theme || 'light';
+  document.body.setAttribute('data-theme', theme);
+}
+
+if (elements.themeToggle) {
+  elements.themeToggle.addEventListener('click', async () => {
+    const currentTheme = document.body.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.body.setAttribute('data-theme', newTheme);
+    await chrome.storage.local.set({ theme: newTheme });
+    showToast(`${newTheme.charAt(0).toUpperCase() + newTheme.slice(1)} mode active`);
+  });
+}
+
+// ... (Utility Functions) ...
+
+async function checkActiveInjection() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url) return;
+
+    const hostname = new URL(tab.url).hostname;
+    const key = 'gtm_inject_' + hostname;
+    const stored = await chrome.storage.local.get(key);
+    const config = stored[key];
+
+    if (config) {
+      elements.injectedSection.style.display = 'block';
+      elements.injectedList.innerHTML = `
+        <div class="container-item" style="border-color:var(--accent-blue)">
+          <div class="container-info">
+            <div class="container-icon gtm">GTM</div>
+            <div>
+              <div class="container-id">${config.gtmId}</div>
+              <div class="container-type" style="color:var(--accent-blue)">Active & Persisted</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:4px">
+             <button class="btn-icon btn-small ta-btn" title="Open Tag Assistant">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+             </button>
+             <button class="btn-icon btn-small remove-inject-btn" title="Remove Injection">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                   <line x1="18" y1="6" x2="6" y2="18"></line>
+                   <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+             </button>
+          </div>
+        </div>
+      `;
+
+      // Tag Assistant Button Logic
+      elements.injectedList.querySelector('.ta-btn').addEventListener('click', async () => {
+        const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (currentTab?.url) {
+          const taUrl = `https://tagassistant.google.com/#/source/TAG_MANAGER?id=${config.gtmId}&url=${encodeURIComponent(currentTab.url)}`;
+          window.open(taUrl, '_blank');
+        }
+      });
+
+      // Remove Logic
+      elements.injectedList.querySelector('.remove-inject-btn').addEventListener('click', async () => {
+        await chrome.storage.local.remove(key);
+        elements.injectedSection.style.display = 'none';
+        chrome.tabs.reload(); // Reload to clear
+      });
+
+    } else {
+      elements.injectedSection.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('Check active injection failed', e);
+  }
+}
 
 // ============================================
 // Utility Functions
@@ -103,11 +243,13 @@ function showToast(message, type = 'success') {
   setTimeout(() => { elements.toast.style.display = 'none'; }, 3000);
 }
 
-function processTemplate(obj) {
+function processTemplate(obj, tab) {
   let str = JSON.stringify(obj);
   str = str.replace(/\{\{timestamp\}\}/g, Date.now());
-  str = str.replace(/\{\{page_title\}\}/g, 'Page Title');
-  str = str.replace(/\{\{page_url\}\}/g, 'https://example.com');
+  str = str.replace(/\{\{transaction_id\}\}/g, 'T-' + Math.floor(Math.random() * 1000000));
+  str = str.replace(/\{\{value\}\}/g, (Math.random() * 100).toFixed(2));
+  str = str.replace(/\{\{page_title\}\}/g, (tab?.title || 'Sample Page').replace(/"/g, '\"'));
+  str = str.replace(/\{\{page_url\}\}/g, tab?.url || 'https://example.com');
   return JSON.parse(str);
 }
 
@@ -124,8 +266,23 @@ elements.tabs.forEach(tab => {
     tab.classList.add('active');
     document.getElementById(`panel-${tabName}`).classList.add('active');
     currentTab = tabName;
+
+    if (tabName === 'network') {
+      renderNetworkRequests();
+    }
+    if (tabName === 'about') {
+      verifyElements(); // Ensure about references are hot
+    }
   });
 });
+
+if (elements.mainSupportLink) {
+  elements.mainSupportLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    const aboutTab = Array.from(elements.tabs).find(t => t.dataset.tab === 'about');
+    if (aboutTab) aboutTab.click();
+  });
+}
 
 // ============================================
 // GTM Injector
@@ -165,7 +322,26 @@ elements.injectBtn.addEventListener('click', async () => {
       elements.gtmIdInput.value = '';
       elements.gtmIdInput.className = 'input';
       loadRecentIds();
-      setTimeout(detectContainers, 1000);
+      // Persist injection for this host
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.url) {
+        try {
+          const hostname = new URL(tab.url).hostname;
+          await chrome.storage.local.set({
+            ['gtm_inject_' + hostname]: {
+              gtmId: result.formatted,
+              options: {
+                initDataLayer: elements.initDataLayer.checked,
+                override: elements.overrideExisting.checked,
+                preview: elements.previewMode.checked
+              }
+            }
+          });
+          checkActiveInjection();
+        } catch (e) { console.error('Storage save failed', e); }
+      }
+
+      setTimeout(() => detectContainers(false), 2000);
     } else {
       showToast(response?.error || 'Injection failed', 'error');
     }
@@ -190,12 +366,31 @@ async function loadRecentIds() {
   });
 }
 
-async function detectContainers() {
+let detectionRetries = 0;
+const MAX_RETRIES = 3;
+
+async function detectContainers(isRetry = false) {
+  if (!isRetry) {
+    elements.refreshContainers.querySelector('svg').classList.add('spin-animation');
+  }
+
   try {
     const response = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.GTM_DETECT });
-    const containers = response || [];
+
+    // Handle error response or invalid data
+    if (response && response.error) {
+      // If it was manual click, throw error to show UI message
+      // If auto-retry, just suppress
+      if (!isRetry) throw new Error(response.error);
+      return;
+    }
+
+    const containers = Array.isArray(response) ? response : [];
 
     if (containers.length > 0) {
+      // Containers found, reset retries
+      detectionRetries = 0;
+      elements.refreshContainers.querySelector('svg').classList.remove('spin-animation');
       elements.containerList.innerHTML = containers.map(c => `
         <div class="container-item">
           <div class="container-info">
@@ -209,6 +404,19 @@ async function detectContainers() {
         </div>
       `).join('');
     } else {
+      // No containers found yet
+      if (detectionRetries < MAX_RETRIES) {
+        detectionRetries++;
+        // Show loading state if it's the first try
+        if (detectionRetries === 1) {
+          elements.containerList.innerHTML = `<div class="empty-state"><p>Scanning...</p></div>`;
+        }
+        // Custom backoff: 500ms, 1500ms, 3000ms
+        setTimeout(() => detectContainers(true), detectionRetries * 1000);
+        return;
+      }
+
+      elements.refreshContainers.querySelector('svg').classList.remove('spin-animation');
       elements.containerList.innerHTML = `
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px">
@@ -220,10 +428,20 @@ async function detectContainers() {
     }
   } catch (e) {
     console.error('Failed to detect containers:', e);
+    elements.refreshContainers.querySelector('svg').classList.remove('spin-animation');
+    elements.containerList.innerHTML = `
+      <div class="empty-state">
+        <p style="color:var(--error-red)">Detection failed</p>
+        <p style="font-size:11px;margin-top:4px">Try refreshing the page</p>
+      </div>
+    `;
   }
 }
 
-elements.refreshContainers.addEventListener('click', detectContainers);
+elements.refreshContainers.addEventListener('click', () => {
+  detectionRetries = 0;
+  detectContainers(false);
+});
 
 // ============================================
 // DataLayer Monitor
@@ -235,30 +453,82 @@ function renderEvents() {
   );
 
   if (filtered.length > 0) {
-    elements.eventList.innerHTML = filtered.slice(-50).map(event => `
-      <div class="event-item" data-id="${event.id}">
+    elements.eventList.innerHTML = filtered.slice().reverse().map(event => {
+      // Validation Logic
+      let warnings = [];
+      const data = event.data?.data || event.data || event; // Try various depths
+      const eventName = data?.event || data?.['0'] || event.eventName || 'push';
+      const jsonString = JSON.stringify(data, null, 2);
+
+      const ecEvents = ['purchase', 'add_to_cart', 'begin_checkout', 'view_item', 'view_item_list', 'select_item', 'remove_from_cart', 'add_to_wishlist'];
+      if (ecEvents.includes(eventName)) {
+        const ecommerce = data.ecommerce || data;
+        const items = ecommerce.items || data.items;
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+          warnings.push('Missing "items" array');
+        } else {
+          // Check first item for common issues
+          const firstItem = items[0];
+          if (!firstItem.item_id && !firstItem.item_name) warnings.push('Item needs id or name');
+          if (firstItem.price === undefined) warnings.push('Item missing price');
+        }
+
+        if (eventName === 'purchase') {
+          if (!ecommerce.transaction_id) warnings.push('Missing "transaction_id"');
+          if (ecommerce.value === undefined) warnings.push('Missing "value"');
+          if (!ecommerce.currency) warnings.push('Missing "currency"');
+        }
+      }
+
+      const validationHtml = warnings.length > 0 ? `
+         <div class="validation-warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            ${warnings.join(', ')}
+         </div>
+       ` : '';
+
+      return `
+      <div class="event-item expanded" data-id="${event.id}">
         <div class="event-header">
-          <div class="event-info">
-            <span class="event-time">${formatTimestamp(event.timestamp)}</span>
-            <span class="event-name">${event.event || event.data?.event || 'push'}</span>
-          </div>
+           <div style="display:flex;flex-direction:column;gap:2px">
+             <span style="font-size:10px;color:var(--text-secondary)">${formatTimestamp(event.timestamp)}</span>
+             <span class="event-name">${eventName}</span>
+           </div>
+           <div class="event-actions">
+              <button class="copy-btn" title="Copy JSON" data-json='${jsonString.replace(/'/g, "&apos;")}'>
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+           </div>
         </div>
-        <div class="event-preview">${JSON.stringify(event.data).substring(0, 80)}...</div>
-        <div class="event-data" style="display:none"><pre>${JSON.stringify(event.data, null, 2)}</pre></div>
+        ${validationHtml}
+        <div class="event-details">${jsonString}</div>
       </div>
-    `).join('');
+    `}).join('');
 
-    elements.eventList.querySelectorAll('.event-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const dataEl = item.querySelector('.event-data');
-        const previewEl = item.querySelector('.event-preview');
-        const isExpanded = dataEl.style.display !== 'none';
-
-        dataEl.style.display = isExpanded ? 'none' : 'block';
-        previewEl.style.display = isExpanded ? 'block' : 'none';
-        item.classList.toggle('expanded', !isExpanded);
+    // Attach Listeners
+    elements.eventList.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const json = btn.dataset.json;
+        navigator.clipboard.writeText(json).then(() => {
+          const originalHTML = btn.innerHTML;
+          btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--success-green)"><polyline points="20 6 9 17 4 12"/></svg>`;
+          setTimeout(() => btn.innerHTML = originalHTML, 1500);
+        });
       });
     });
+
+    // Toggle details on header click
+    elements.eventList.querySelectorAll('.event-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const item = header.parentElement;
+        const details = item.querySelector('.event-details');
+        const isHidden = details.style.display === 'none';
+        details.style.display = isHidden ? 'block' : 'none';
+      });
+    });
+
   } else {
     elements.eventList.innerHTML = `
       <div class="empty-state">
@@ -294,14 +564,149 @@ async function loadEvents() {
   }
 }
 
+
+// ============================================
+// Network Monitor
+// ============================================
+function renderNetworkRequests() {
+  if (networkRequests.length > 0) {
+    elements.networkList.innerHTML = networkRequests.slice(-50).reverse().map(req => {
+      let urlObj;
+      try { urlObj = new URL(req.url); } catch { urlObj = { pathname: req.url, searchParams: [] } }
+      const isSuccess = (req.statusCode >= 200 && req.statusCode < 300) || req.statusCode === 0;
+
+      const paramRows = [];
+      if (urlObj.searchParams) {
+        urlObj.searchParams.forEach((val, key) => {
+          paramRows.push(`<div class="param-key">${key}:</div><div class="param-value">${val}</div>`);
+        });
+      }
+
+      const badgeHtml = `
+        <div class="network-badges">
+          ${req.isServerSide ? '<span class="badge badge-server">Server-Side</span>' : ''}
+          ${req.hasEnhancedConversions ? '<span class="badge badge-ec">Enhanced Conversions</span>' : ''}
+        </div>
+      `;
+
+      return `
+      <div class="network-item" style="border-left: 3px solid ${req.typeColor || '#ccc'}">
+        <div class="network-header">
+           <span class="network-method ${req.method}">${req.method || 'GET'}</span>
+           <span class="network-type">${req.typeName || req.type}</span>
+           <span class="network-status ${isSuccess ? 'success' : 'error'}">${req.statusCode || (req.error ? 'ERR' : '...')}</span>
+           <span style="margin-left:auto;font-size:10px;color:var(--text-muted)">${formatTimestamp(req.timestamp)}</span>
+        </div>
+        <div class="network-url" title="${req.url}">${urlObj.pathname}</div>
+        ${badgeHtml}
+        <div class="network-details" style="display:none">
+            <div style="margin-bottom:12px;display:flex;flex-direction:column;gap:8px">
+               ${req.hasEnhancedConversions ? `
+                 <div class="validation-warning" style="background:rgba(34,197,94,0.1);color:var(--success-green);border-color:rgba(34,197,94,0.3)">
+                   <strong>Enhanced Conversions Detected</strong>
+                   <ul style="margin-left:14px;font-size:10px">
+                     ${Object.keys(req.ecValidation.fields).map(f => `<li>${f}: ${req.ecValidation.fields[f].type}</li>`).join('')}
+                   </ul>
+                 </div>
+               ` : ''}
+            </div>
+            <div style="margin-bottom:6px;color:var(--text-secondary)"><strong>Request URL:</strong></div>
+            <div style="word-break:break-all;color:var(--text-primary);font-family:'Consolas',monospace;font-size:11px;margin-bottom:12px;padding:6px;background:var(--bg-primary);border-radius:4px">${req.url}</div>
+            
+            ${paramRows.length ? `
+              <div style="margin-bottom:6px;color:var(--text-secondary)"><strong>Query Parameters:</strong></div>
+              <div class="network-params">
+                ${paramRows.join('')}
+              </div>
+            ` : ''}
+        </div>
+      </div>
+    `}).join('');
+
+    elements.networkList.querySelectorAll('.network-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const detailsEl = item.querySelector('.network-details');
+        const isExpanded = detailsEl.style.display !== 'none';
+        detailsEl.style.display = isExpanded ? 'none' : 'block';
+        if (!isExpanded) {
+          item.style.borderColor = 'var(--accent-blue)';
+        } else {
+          item.style.borderColor = 'var(--border)';
+        }
+      });
+    });
+  } else {
+    elements.networkList.innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+        <p>No network requests</p>
+      </div>
+    `;
+  }
+}
+
+
+async function loadNetworkRequests() {
+  try {
+    // NETWORK_GET typically returns all requests for current tab 
+    // We haven't implemented MESSAGE_TYPES.NETWORK_GET listener fully with tabId filtering in sidepanel context easily
+    // But service worker supports it. We need current tab ID.
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return;
+
+    const result = await chrome.runtime.sendMessage({
+      type: 'NETWORK_GET',
+      tabId: tab.id
+    });
+
+    if (Array.isArray(result)) {
+      networkRequests = result;
+      renderNetworkRequests();
+    }
+  } catch (e) {
+    console.warn('Failed to load network requests:', e);
+  }
+}
+
+if (elements.clearNetwork) {
+  elements.clearNetwork.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'NETWORK_CLEAR' });
+    networkRequests = [];
+    renderNetworkRequests();
+  });
+}
+
+// ============================================
+// Visual Element Picker
+// ============================================
+elements.pickElementBtn.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    chrome.tabs.sendMessage(tab.id, { type: 'SELECTOR_START' });
+    showToast('Click an element on the page', 'info');
+  }
+});
+
+elements.captureHighlightBtn.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    chrome.tabs.sendMessage(tab.id, { type: 'SELECTOR_FROM_HIGHLIGHT' });
+  }
+});
+
 // ============================================
 // DataLayer Push
 // ============================================
 elements.presetButtons.querySelectorAll('.preset-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const preset = PRESETS[btn.dataset.preset];
     if (preset) {
-      const processed = processTemplate(preset);
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const processed = processTemplate(preset, tab);
       elements.jsonEditor.value = JSON.stringify(processed, null, 2);
       elements.jsonError.style.display = 'none';
       elements.jsonEditor.className = 'json-editor';
@@ -327,11 +732,18 @@ elements.pushBtn.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (tab) {
-      await chrome.tabs.sendMessage(tab.id, {
+      const response = await chrome.tabs.sendMessage(tab.id, {
         type: MESSAGE_TYPES.DATALAYER_PUSH,
         data
       });
-      showToast(`Event "${data.event || 'push'}" sent!`, 'success');
+
+      if (response && response.error) {
+        showToast(response.error, 'error');
+      } else {
+        showToast(`Event "${data.event || 'push'}" sent!`, 'success');
+        // Refresh events list after a short delay to allow round-trip
+        setTimeout(loadEvents, 800);
+      }
     }
   } catch (e) {
     showToast(e.message, 'error');
@@ -348,9 +760,204 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === MESSAGE_TYPES.DATALAYER_PUSH) {
     events.push(message.data);
     renderEvents();
+  } else if (message.type === 'NETWORK_REQUEST') {
+    networkRequests.push(message.data);
+    if (currentTab === 'network') {
+      renderNetworkRequests();
+    }
+  } else if (message.type === 'GA4_SESSION_UPDATE') {
+    updateSessionDeepDive(message.data);
   } else if (message.type === MESSAGE_TYPES.TAB_UPDATED) {
     updateCurrentUrl(message.data.url);
+    checkActiveInjection();
+    detectContainers();
+    resetSessionDeepDive();
+    if (currentTab === 'cookies') refreshCookies();
+  } else if (message.type === 'SELECTOR_RESULT') {
+    verifyElements();
+    if (message.payload.error) {
+      showToast(message.payload.error, 'error');
+      return;
+    }
+    const { selector, tagName } = message.payload;
+    if (!selector) return;
+
+    // UI Updates
+    if (elements.selectorResult) {
+      elements.selectorResult.style.display = 'block';
+      elements.selectorResult.classList.remove('result-pulse');
+      void elements.selectorResult.offsetWidth; // Trigger reflow
+      elements.selectorResult.classList.add('result-pulse');
+    }
+    if (elements.testResultArea) elements.testResultArea.style.display = 'none';
+    if (elements.pickedSelector) elements.pickedSelector.textContent = selector;
+
+    // Scroll to results
+    if (elements.selectorResult) {
+      setTimeout(() => {
+        elements.selectorResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+
+    // Generate Code
+    const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tagName);
+    const getter = isInput ? 'el.value' : 'el.innerText';
+
+    // Escape quotes for the querySelector string
+    const escapedSelector = selector.replace(/'/g, "\\'");
+
+    const gtmCode = `function() {
+  var el = document.querySelector('${escapedSelector}');
+  return el ? ${getter} : undefined;
+}`;
+
+    const testCode = `(function() {
+  var el = document.querySelector('${escapedSelector}');
+  var val = el ? ${getter} : undefined;
+  console.log('GTM Variable Value:', val);
+  return val;
+})();`;
+
+    if (elements.pickedJsVar) elements.pickedJsVar.textContent = gtmCode;
+    if (elements.pickedJsTest) elements.pickedJsTest.textContent = testCode;
+
+    showToast('Variable generated!', 'success');
   }
+});
+
+// Copy Listeners
+[
+  { btn: elements.copyJsVar, el: elements.pickedJsVar, msg: 'GTM Code copied!' },
+  { btn: elements.copyJsTest, el: elements.pickedJsTest, msg: 'Test Code copied!' }
+].forEach(target => {
+  if (target.btn) {
+    target.btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(target.el.textContent).then(() => {
+        showToast(target.msg, 'success');
+      });
+    });
+  }
+});
+
+
+if (elements.saveAsSnippet) {
+  elements.saveAsSnippet.addEventListener('click', async () => {
+    const code = elements.pickedJsVar.textContent;
+    const name = prompt('Enter a name for this snippet:', 'GTM Var: ' + (elements.pickedSelector.textContent.substring(0, 20)));
+
+    if (name && code) {
+      const newSnippet = {
+        id: 'custom_' + Date.now(),
+        name: name,
+        code: code,
+        isCustom: true
+      };
+
+      const stored = await chrome.storage.local.get('custom_snippets');
+      const snippets = stored.custom_snippets || [];
+      snippets.push(newSnippet);
+      await chrome.storage.local.set({ 'custom_snippets': snippets });
+
+      showToast('Snippet saved to library!', 'success');
+      if (currentTab === 'push') renderSnippets();
+    }
+  });
+}
+
+if (elements.runJsTest) {
+  elements.runJsTest.addEventListener('click', async () => {
+    const codeSnippet = elements.pickedJsTest.textContent;
+    // Extract the internal function or execute the whole block
+    // Since it's console.log((function(){...})()), we'll execute it and capture the return
+    try {
+      elements.runJsTest.querySelector('svg').classList.add('spin-animation');
+
+      const response = await chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.CODE_EXECUTE,
+        code: codeSnippet
+      });
+
+      elements.runJsTest.querySelector('svg').classList.remove('spin-animation');
+
+      if (response && response.success) {
+        elements.testResultArea.style.display = 'block';
+        const resultValue = response.result;
+        elements.testResultValue.textContent = (resultValue === undefined) ? 'undefined' :
+          (resultValue === null ? 'null' : JSON.stringify(resultValue));
+        elements.testResultValue.style.color = resultValue ? 'var(--success-green)' : 'var(--error-red)';
+      } else {
+        showToast(response?.error || 'Test failed', 'error');
+      }
+    } catch (e) {
+      elements.runJsTest.querySelector('svg').classList.remove('spin-animation');
+      console.error('Test Execution Error:', e);
+    }
+  });
+}
+
+function updateSessionDeepDive(data) {
+  if (!data) return;
+  elements.sessionBar.style.display = 'flex';
+  if (data.tid) elements.deepTid.textContent = data.tid;
+  if (data.sid) elements.deepSid.textContent = data.sid;
+  if (data.cid) elements.deepCid.textContent = data.cid;
+}
+
+function resetSessionDeepDive() {
+  elements.sessionBar.style.display = 'none';
+  elements.deepTid.textContent = '-';
+  elements.deepSid.textContent = '-';
+  elements.deepCid.textContent = '-';
+}
+
+// ============================================
+// Export Functions
+// ============================================
+elements.exportJson.addEventListener('click', () => {
+  const data = {
+    events,
+    networkRequests,
+    timestamp: new Date().toISOString(),
+    url: elements.currentUrl.textContent
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `swiss-knife-export-${Date.now()}.json`;
+  a.click();
+  showToast('JSON Exported');
+});
+
+elements.exportCsv.addEventListener('click', () => {
+  if (events.length === 0) return showToast('No events to export', 'error');
+
+  const headers = ['Timestamp', 'Event', 'Data'];
+  const rows = events.map(e => [
+    formatTimestamp(e.timestamp),
+    e.event || e.data?.event || 'push',
+    JSON.stringify(e.data).replace(/"/g, '""')
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(r => r.map(v => `"${v}"`).join(','))
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `swiss-knife-events-${Date.now()}.csv`;
+  a.click();
+  showToast('CSV Exported');
+});
+
+// Listen for tab switching
+chrome.tabs.onActivated.addListener(() => {
+  getCurrentTab();
+  checkActiveInjection();
+  detectContainers();
 });
 
 // ============================================
@@ -378,11 +985,341 @@ async function getCurrentTab() {
 }
 
 // ============================================
+// Consent Mode Monitor
+// ============================================
+let consentState = null;
+
+async function loadConsentState() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'CONSENT_GET' });
+    if (response && !response.error) {
+      consentState = response;
+      renderConsentState();
+    }
+  } catch (e) {
+    // console.error(e);
+  }
+}
+
+function renderConsentState() {
+  const list = document.getElementById('consentList');
+  if (!list) return;
+
+  if (!consentState) {
+    list.innerHTML = '<div class="empty-state"><p>No consent data</p></div>';
+    return;
+  }
+
+  const mapColor = (status) => {
+    if (status === 'granted') return 'var(--success-green)';
+    if (status === 'denied') return 'var(--error-red)';
+    return 'var(--text-muted)';
+  };
+
+  list.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            ${Object.keys(consentState).map(key => `
+                <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:4px">
+                    <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase">${key.replace(/_/g, ' ')}</div>
+                    <div style="font-size:12px;font-weight:600;color:${mapColor(consentState[key])}">
+                        ${consentState[key].toUpperCase()}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// ============================================
+// Tools Section (Blocker & Cleaner)
+// ============================================
+
+
+const clearCookiesBtn = document.getElementById('clearCookies');
+if (clearCookiesBtn) {
+  clearCookiesBtn.addEventListener('click', async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: 'CLEAR_GOOGLE_COOKIES'
+        });
+        showToast('Google Cookies Cleared', 'success');
+        setTimeout(() => chrome.tabs.reload(tab.id), 1000);
+      }
+    } catch (e) {
+      showToast('Failed to clear cookies', 'error');
+    }
+  });
+}
+
+// ============================================
+// Tools: Block GA4
+// ============================================
+async function checkBlockGA4State() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url) return;
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => window.sessionStorage.getItem('swissKnifeBlockGA4') === 'true'
+    });
+
+    const blockGA4 = document.getElementById('blockGA4');
+    if (results && results[0] && blockGA4) {
+      blockGA4.checked = results[0].result;
+    }
+  } catch (e) { }
+}
+
+const blockGA4Btn = document.getElementById('blockGA4');
+if (blockGA4Btn) {
+  blockGA4Btn.addEventListener('change', async (e) => {
+    const enabled = e.target.checked;
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: 'BLOCK_GA4_HITS',
+          enabled
+        });
+      }
+    } catch (e) {
+      console.error('Failed to toggle GA4 block', e);
+      e.target.checked = !enabled;
+    }
+  });
+}
+
+// ============================================
+// Professional Features: Audit
+// ============================================
+async function runAudit() {
+  if (!elements.runAudit) return;
+  elements.runAudit.textContent = 'Scanning...';
+  elements.runAudit.disabled = true;
+  elements.auditResults.innerHTML = '<div class="empty-state"><p>Analyzing tracking setup...</p></div>';
+
+  const checks = [];
+
+  // 1. GTM Check
+  const containers = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.GTM_DETECT });
+  const gtmCount = (containers || []).filter(c => c.type === 'GTM').length;
+  if (gtmCount > 1) {
+    checks.push({ status: 'warning', title: 'Multiple GTM Containers', desc: `Found ${gtmCount} containers. This might cause data discrepancies.` });
+  } else if (gtmCount === 1) {
+    checks.push({ status: 'success', title: 'GTM Found', desc: 'Single GTM container detected correctly.' });
+  } else {
+    checks.push({ status: 'error', title: 'GTM Missing', desc: 'No GTM container detected on this page.' });
+  }
+
+  // 2. Conversion Linker Check
+  const cookies = await chrome.runtime.sendMessage({ type: 'COOKIES_GET' });
+  const hasLinker = (cookies || []).some(c => c.name === '_gcl_au');
+  if (hasLinker) {
+    checks.push({ status: 'success', title: 'Conversion Linker', desc: 'Active (_gcl_au found). Attribution will work correctly.' });
+  } else {
+    checks.push({ status: 'warning', title: 'No Conversion Linker', desc: 'Missing _gcl_au cookie. Google Ads attribution might be limited.' });
+  }
+
+  // 3. Consent Mode Check
+  const hasConsentHit = networkRequests.some(r => r.url.includes('gcs=') || r.url.includes('gcd='));
+  if (hasConsentHit) {
+    checks.push({ status: 'success', title: 'Consent Mode V2', desc: 'Consent parameters (gcs/gcd) detected in network traffic.' });
+  } else {
+    checks.push({ status: 'error', title: 'Consent Missing', desc: 'No Consent Mode signals detected. Required for 2025 compliance!' });
+  }
+
+  // 4. GA4 Hit Check
+  const hasGA4 = networkRequests.some(r => r.type === 'GA4' || r.type === 'GA4_SERVER_SIDE');
+  if (hasGA4) {
+    checks.push({ status: 'success', title: 'GA4 Active', desc: 'GA4 data collection hits detected.' });
+  }
+
+  // 5. Martech Audit (Meta, TikTok, LinkedIn)
+  const metaHit = networkRequests.find(r => r.type === 'META_PIXEL');
+  if (metaHit) checks.push({ status: 'success', title: 'Meta Pixel', desc: 'Meta tracking detected.' });
+  else checks.push({ status: 'warning', title: 'Meta Pixel Missing', desc: 'No Meta Pixel hits found.' });
+
+  const ttHit = networkRequests.find(r => r.type === 'TIKTOK_PIXEL');
+  if (ttHit) checks.push({ status: 'success', title: 'TikTok Pixel', desc: 'TikTok tracking detected.' });
+
+  const liHit = networkRequests.find(r => r.type === 'LINKEDIN_PIXEL');
+  if (liHit) checks.push({ status: 'success', title: 'LinkedIn Insight', desc: 'LinkedIn tracking detected.' });
+
+  renderAuditResults(checks);
+  elements.runAudit.textContent = 'Run Scan';
+  elements.runAudit.disabled = false;
+}
+
+function renderAuditResults(checks) {
+  elements.auditResults.innerHTML = checks.map(c => `
+    <div class="container-item" style="border-left: 4px solid ${c.status === 'success' ? 'var(--success-green)' : (c.status === 'warning' ? 'var(--warning-yellow)' : 'var(--error-red)')}">
+      <div style="flex:1">
+        <div style="font-weight:600;display:flex;align-items:center;gap:6px">
+          <span style="color:${c.status === 'success' ? 'var(--success-green)' : (c.status === 'warning' ? 'var(--warning-yellow)' : 'var(--error-red)')}">
+            ${c.status === 'success' ? '✓' : (c.status === 'warning' ? '⚠' : '✗')}
+          </span>
+          ${c.title}
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${c.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+if (elements.runAudit) elements.runAudit.addEventListener('click', runAudit);
+
+// ============================================
+// Professional Features: Cookies
+// ============================================
+async function refreshCookies() {
+  if (!elements.refreshCookies) return;
+  elements.refreshCookies.querySelector('svg').classList.add('spin-animation');
+  try {
+    const cookies = await chrome.runtime.sendMessage({ type: 'COOKIES_GET' });
+    renderCookies(cookies || []);
+  } catch (e) {
+    console.error('Cookie Refresh Failed', e);
+  }
+  elements.refreshCookies.querySelector('svg').classList.remove('spin-animation');
+}
+
+function renderCookies(cookies) {
+  if (cookies.length === 0) {
+    elements.cookieList.innerHTML = '<div class="empty-state"><p>No tracking cookies found</p></div>';
+    return;
+  }
+
+  elements.cookieList.innerHTML = cookies.map(c => `
+    <div class="container-item">
+      <div style="flex:1;overflow:hidden">
+        <div style="font-weight:600;font-size:12px;color:var(--accent-blue)">${c.name}</div>
+        <div style="font-size:11px;color:var(--text-muted);text-overflow:ellipsis;overflow:hidden;white-space:nowrap" title="${c.value}">${c.value}</div>
+        <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">Expires: ${c.expirationDate ? new Date(c.expirationDate * 1000).toLocaleDateString() : 'Session'}</div>
+      </div>
+      <button class="btn-icon btn-small delete-cookie" data-name="${c.name}" title="Delete Cookie">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+  `).join('');
+
+  elements.cookieList.querySelectorAll('.delete-cookie').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name;
+      await chrome.runtime.sendMessage({ type: 'COOKIES_DELETE', name });
+      showToast(`Cookie ${name} deleted`);
+      refreshCookies();
+    });
+  });
+}
+
+if (elements.refreshCookies) elements.refreshCookies.addEventListener('click', refreshCookies);
+
+// ============================================
+// Professional Features: Snippets
+// ============================================
+const SNIPPETS = [
+  { id: 'dl_size', name: 'Check DataLayer Size', code: 'alert("DataLayer length: " + (window.dataLayer ? window.dataLayer.length : 0))' },
+  { id: 'ec_check', name: 'Log eCommerce items', code: 'console.table(window.dataLayer.filter(e => e.ecommerce && e.ecommerce.items).map(e => e.ecommerce.items).flat())' },
+  { id: 'clear_ga4', name: 'Clear GA4 SessionStorage', code: 'Object.keys(sessionStorage).filter(k => k.startsWith("_ga")).forEach(k => sessionStorage.removeItem(k)); alert("GA4 Session Storage Cleared")' },
+  { id: 'force_scroll', name: 'Inject 90% Scroll Hit', code: 'window.dataLayer.push({event: "scroll", percent_scrolled: 90});' }
+];
+
+async function renderSnippets() {
+  if (!elements.snippetList) return;
+
+  const stored = await chrome.storage.local.get('custom_snippets');
+  const customSnippets = stored.custom_snippets || [];
+  const allSnippets = [...SNIPPETS, ...customSnippets];
+
+  elements.snippetList.innerHTML = allSnippets.map(s => `
+    <div class="container-item" style="cursor:pointer" data-id="${s.id}">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:12px;display:flex;align-items:center;gap:6px">
+          ${s.isCustom ? '<span style="color:var(--accent-blue)">★</span>' : ''}
+          ${s.name}
+        </div>
+        <div style="font-size:10px;color:var(--text-muted)">Click to execute in page</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        ${s.isCustom ? `
+          <button class="btn-icon btn-small delete-snippet" data-id="${s.id}" title="Delete Snippet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;color:var(--error-red)"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        ` : ''}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--accent-blue)"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+    </div>
+  `).join('');
+
+  // Handle execute
+  elements.snippetList.querySelectorAll('.container-item').forEach(item => {
+    item.addEventListener('click', async (e) => {
+      if (e.target.closest('.delete-snippet')) return;
+
+      const snippet = allSnippets.find(s => s.id === item.dataset.id);
+      if (snippet) {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab) {
+          chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            world: 'MAIN',
+            func: (code) => {
+              try {
+                new Function(code)();
+              } catch (e) { console.error('Snippet execution failed', e); }
+            },
+            args: [snippet.code]
+          });
+          showToast(`Executing: ${snippet.name}`);
+        }
+      }
+    });
+  });
+
+  // Handle delete
+  elements.snippetList.querySelectorAll('.delete-snippet').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const stored = await chrome.storage.local.get('custom_snippets');
+      const snippets = (stored.custom_snippets || []).filter(s => s.id !== id);
+      await chrome.storage.local.set({ 'custom_snippets': snippets });
+      renderSnippets();
+      showToast('Snippet deleted');
+    });
+  });
+}
+
+// Update tab navigation to trigger renders
+elements.tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const tabName = tab.dataset.tab;
+    if (tabName === 'cookies') refreshCookies();
+    if (tabName === 'push') renderSnippets();
+    if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
+  });
+});
+
+async function loadSessionInfo() {
+  const info = await chrome.runtime.sendMessage({ type: 'GA4_SESSION_GET' });
+  if (info) updateSessionDeepDive(info);
+}
+
+// ============================================
 // Initialize
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   loadRecentIds();
   detectContainers();
+  checkActiveInjection();
   loadEvents();
+  loadNetworkRequests();
+  loadConsentState();
+  checkBlockGA4State();
   getCurrentTab();
+  loadSessionInfo();
 });

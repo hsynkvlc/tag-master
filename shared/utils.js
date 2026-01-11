@@ -71,6 +71,11 @@ export function parseUrl(url) {
  * Identify Google request type from URL
  */
 export function identifyGoogleRequest(url) {
+  const urlObj = new URL(url);
+  const hostname = urlObj.hostname;
+  const pathname = urlObj.pathname;
+
+  // 1. Check standard patterns first
   for (const [type, config] of Object.entries(GOOGLE_PATTERNS)) {
     for (const pattern of config.patterns) {
       if (pattern.test(url)) {
@@ -78,11 +83,39 @@ export function identifyGoogleRequest(url) {
           type,
           name: config.name,
           icon: config.icon,
-          color: config.color
+          color: config.color,
+          isServerSide: false
         };
       }
     }
   }
+
+  // 2. Additional Martech Pixels
+  if (url.includes('facebook.com/tr') || url.includes('connect.facebook.net')) {
+    return { type: 'META_PIXEL', name: 'Meta Pixel', icon: 'facebook', color: '#1877F2', isServerSide: false };
+  }
+  if (url.includes('tiktok.com/api/v1/pixel') || url.includes('analytics.tiktok.com')) {
+    return { type: 'TIKTOK_PIXEL', name: 'TikTok Pixel', icon: 'tiktok', color: '#000000', isServerSide: false };
+  }
+  if (url.includes('linkedin.com/collect') || url.includes('snap.licdn.com')) {
+    return { type: 'LINKEDIN_PIXEL', name: 'LinkedIn Insight', icon: 'linkedin', color: '#0077B5', isServerSide: false };
+  }
+
+  // 3. Detect GTM Server-Side GA4 hits on custom domains
+  // GA4 hits use /g/collect or /collect?v=2 
+  if ((pathname.includes('/g/collect') || urlObj.searchParams.get('v') === '2')) {
+    // If it's not a google domain but looks like GA4
+    if (!hostname.includes('google-analytics.com') && !hostname.includes('analytics.google.com')) {
+      return {
+        type: 'GA4_SERVER_SIDE',
+        name: 'GA4 (Server-Side)',
+        icon: 'ga4',
+        color: '#F9AB00',
+        isServerSide: true
+      };
+    }
+  }
+
   return null;
 }
 
