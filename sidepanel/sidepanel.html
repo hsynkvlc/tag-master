@@ -120,6 +120,70 @@
       </button>
     </div>
 
+    <!-- Welcome Overlay -->
+    <div id="welcomeOverlay"
+      style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg-primary);z-index:9999;flex-direction:column;padding:30px;text-align:center;justify-content:center;align-items:center">
+      <div
+        style="background:var(--google-blue);width:60px;height:60px;border-radius:18px;display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 10px 20px rgba(66, 133, 244, 0.3)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" style="width:32px;height:32px">
+          <path d="M14.5 2L4 12.5V18h5.5L20 7.5c.83-.83.83-2.17 0-3L17 1.5c-.83-.83-2.17-.83-3 0l-.5.5z" />
+        </svg>
+      </div>
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:10px;color:var(--text-primary)">Welcome to Swiss Knife
+      </h1>
+      <p style="color:var(--text-secondary);font-size:13px;line-height:1.6;margin-bottom:30px">Your ultimate companion
+        for Google Tag Manager and GA4 debugging.</p>
+
+      <div
+        style="display:grid;grid-template-columns:1fr;gap:12px;width:100%;max-width:280px;text-align:left;margin-bottom:40px">
+        <div
+          style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border)">
+          <div style="color:var(--google-blue)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700">Quick GTM Injection</div>
+            <div style="font-size:9px;color:var(--text-muted)">Inject any container instantly</div>
+          </div>
+        </div>
+        <div
+          style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border)">
+          <div style="color:var(--google-green)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700">Real-time Hit Monitor</div>
+            <div style="font-size:9px;color:var(--text-muted)">Inspect GA4 parameters decoded</div>
+          </div>
+        </div>
+        <div
+          style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border)">
+          <div style="color:var(--google-yellow)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700">Audit & Compliance</div>
+            <div style="font-size:9px;color:var(--text-muted)">One-click tracking readiness check</div>
+          </div>
+        </div>
+      </div>
+
+      <button id="getStartedBtn" class="btn"
+        style="width:100%;max-width:280px;padding:14px;background:var(--google-blue);color:white;border:none;box-shadow:0 5px 15px rgba(66, 133, 244, 0.4);border-radius:12px;font-weight:700;font-size:14px;cursor:pointer">
+        Get Started
+      </button>
+      <div style="margin-top:20px;font-size:10px;color:var(--text-muted)">v1.2.0 • Developer Edition</div>
+    </div>
+
     <!-- Content -->
     <div class="content">
       <!-- GTM Injector Panel -->

@@ -129,7 +129,10 @@ const elements = {
   // Theme
   themeToggle: document.getElementById('themeToggle'),
   // Support Link
-  mainSupportLink: document.getElementById('mainSupportLink')
+  mainSupportLink: document.getElementById('mainSupportLink'),
+  // Welcome
+  welcomeOverlay: document.getElementById('welcomeOverlay'),
+  getStartedBtn: document.getElementById('getStartedBtn')
 };
 
 // Re-verify elements in case some were late-loaded or moved
@@ -1511,11 +1514,34 @@ async function loadSessionInfo() {
   if (info) updateSessionDeepDive(info);
 }
 
+async function checkWelcome() {
+  const stored = await chrome.storage.local.get('welcome_dismissed');
+  if (!stored.welcome_dismissed) {
+    if (elements.welcomeOverlay) {
+      elements.welcomeOverlay.style.display = 'flex';
+    }
+  }
+}
+
+if (elements.getStartedBtn) {
+  elements.getStartedBtn.addEventListener('click', async () => {
+    await chrome.storage.local.set({ welcome_dismissed: true });
+    if (elements.welcomeOverlay) {
+      elements.welcomeOverlay.style.opacity = '0';
+      elements.welcomeOverlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        elements.welcomeOverlay.style.display = 'none';
+      }, 300);
+    }
+  });
+}
+
 // ============================================
 // Initialize
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
+  checkWelcome();
   loadRecentIds();
   detectContainers();
   checkActiveInjection();
