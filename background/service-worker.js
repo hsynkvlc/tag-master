@@ -4,7 +4,7 @@
  */
 
 import { MESSAGE_TYPES, DEFAULT_SETTINGS, GOOGLE_PATTERNS } from '../shared/constants.js';
-import { generateId, identifyGoogleRequest, formatTimestamp, isGoogleRequest } from '../shared/utils.js';
+import { generateId, identifyGoogleRequest, formatTimestamp, isGoogleRequest, validateEnhancedConversions } from '../shared/utils.js';
 
 // ============================================
 // State Management
@@ -13,6 +13,7 @@ let tabSessions = {}; // Stores GA4 session info per tab
 let tabEvents = {}; // Stores DataLayer events per tab { tabId: [] }
 let tabRequests = {}; // Stores Network requests per tab { tabId: [] }
 let settings = { ...DEFAULT_SETTINGS };
+let currentSession = null; // Current debugging session
 
 // ============================================
 // IndexedDB Setup
@@ -150,8 +151,14 @@ async function startSession() {
   return currentSession;
 }
 
-// DEPRECATED currentSession logic removed for tab-specific approach
-// Keeping functions for DB compatibility if needed later
+async function updateSession(updates) {
+  if (!currentSession) return;
+  Object.assign(currentSession, updates);
+  if (db) {
+    await dbPut('sessions', currentSession).catch(console.error);
+  }
+  return currentSession;
+}
 
 // ============================================
 // Network Request Handling
@@ -210,8 +217,9 @@ function captureNetworkRequest(details) {
   }
 }
 
-function updateNetworkRequest(requestId, updates) {
-  const request = networkRequests.find(r => r.id === requestId);
+function updateNetworkRequest(tabId, requestId, updates) {
+  const requests = tabRequests[tabId] || [];
+  const request = requests.find(r => r.id === requestId);
   if (request) {
     Object.assign(request, updates);
     if (db && settings.preserveLog) {
@@ -423,6 +431,22 @@ async function handleMessage(message, sender) {
       });
       return { success: true };
 
+    case 'COOKIES_SET':
+      const [setTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!setTab?.url) return { success: false };
+
+      const urlObj = new URL(setTab.url);
+      await chrome.cookies.set({
+        url: setTab.url,
+        domain: urlObj.hostname,
+        path: '/',
+        name: message.name,
+        value: message.value,
+        expirationDate: message.expirationDate || (Date.now() / 1000 + 7776000), // 90 days default
+        sameSite: 'lax'
+      });
+      return { success: true };
+
     // Code Execution
     case MESSAGE_TYPES.CODE_EXECUTE:
       const [execTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -448,6 +472,30 @@ async function handleMessage(message, sender) {
         }
       }
       return { error: 'No active tab' };
+
+    case 'GET_CSP':
+      const [cspTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (cspTab) {
+        try {
+          const result = await chrome.tabs.sendMessage(cspTab.id, { type: 'GET_CSP' });
+          return result || { csp: '' };
+        } catch (e) {
+          return { csp: '', error: 'Failed to get CSP' };
+        }
+      }
+      return { csp: '', error: 'No active tab' };
+
+    case 'DETECT_TECH':
+      const [techTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (techTab) {
+        try {
+          const result = await chrome.tabs.sendMessage(techTab.id, { type: 'DETECT_TECH' });
+          return result || { technologies: [] };
+        } catch (e) {
+          return { technologies: [], error: 'Failed to detect technologies' };
+        }
+      }
+      return { technologies: [], error: 'No active tab' };
 
     case 'GA4_SESSION_GET':
       const [sessionTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -475,16 +523,17 @@ chrome.webRequest.onBeforeRequest.addListener(
 chrome.webRequest.onCompleted.addListener(
   (details) => {
     if (isGoogleRequest(details.url)) {
-      const request = networkRequests.find(
+      const requests = tabRequests[details.tabId] || [];
+      const request = requests.find(
         r => r.url === details.url && r.tabId === details.tabId
       );
       if (request) {
-        updateNetworkRequest(request.id, {
+        updateNetworkRequest(details.tabId, request.id, {
           statusCode: details.statusCode,
           timing: {
-            ...request.timing,
+            ...(request.timing || {}),
             endTime: details.timeStamp,
-            duration: details.timeStamp - request.timing.startTime
+            duration: request.timing ? details.timeStamp - request.timing.startTime : 0
           }
         });
       }
@@ -497,11 +546,12 @@ chrome.webRequest.onCompleted.addListener(
 chrome.webRequest.onErrorOccurred.addListener(
   (details) => {
     if (isGoogleRequest(details.url)) {
-      const request = networkRequests.find(
+      const requests = tabRequests[details.tabId] || [];
+      const request = requests.find(
         r => r.url === details.url && r.tabId === details.tabId
       );
       if (request) {
-        updateNetworkRequest(request.id, {
+        updateNetworkRequest(details.tabId, request.id, {
           error: details.error,
           statusCode: 0
         });
@@ -518,18 +568,16 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (details.frameId === 0) {
     // Clear data for this tab on refresh to avoid duplicates
     // We do this at onCommitted (earliest point for new document)
-    dataLayerEvents = dataLayerEvents.filter(e => e.tabId !== details.tabId);
-    networkRequests = networkRequests.filter(r => r.tabId !== details.tabId);
+    // DISABLED CLEARING to preserve history across navigations per user request
+    // tabEvents[details.tabId] = [];
+    // tabRequests[details.tabId] = [];
 
-    if (currentSession) {
-      // Main frame navigation committed
-      // Note: We update session stats on completed for accuracy, 
-      // but we broadcast TAB_UPDATED here for UI responsiveness
-      broadcastMessage({
-        type: MESSAGE_TYPES.TAB_UPDATED,
-        data: { url: details.url, tabId: details.tabId }
-      });
-    }
+    // Main frame navigation committed
+    // Broadcast TAB_UPDATED for UI responsiveness
+    broadcastMessage({
+      type: MESSAGE_TYPES.TAB_UPDATED,
+      data: { url: details.url, tabId: details.tabId }
+    });
   }
 });
 

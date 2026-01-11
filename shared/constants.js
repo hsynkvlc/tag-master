@@ -464,3 +464,133 @@ export const DEFAULT_SETTINGS = {
 // SHA-256 Hash Pattern (for Enhanced Conversions validation)
 export const SHA256_PATTERN = /^[a-f0-9]{64}$/i;
 export const MD5_PATTERN = /^[a-f0-9]{32}$/i;
+
+// GA4 Event Schema Definitions (for validation)
+export const GA4_EVENT_SCHEMAS = {
+  // Ecommerce Events with Required/Recommended params
+  purchase: {
+    required: ['transaction_id', 'value', 'currency'],
+    recommended: ['tax', 'shipping', 'coupon', 'items'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  add_to_cart: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  remove_from_cart: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  view_item: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price']
+  },
+  view_item_list: {
+    required: ['items'],
+    recommended: ['item_list_id', 'item_list_name'],
+    itemParams: ['item_id', 'item_name', 'index']
+  },
+  select_item: {
+    required: ['items'],
+    recommended: ['item_list_id', 'item_list_name'],
+    itemParams: ['item_id', 'item_name']
+  },
+  begin_checkout: {
+    required: ['currency', 'value', 'items'],
+    recommended: ['coupon'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  add_shipping_info: {
+    required: ['currency', 'value', 'items'],
+    recommended: ['coupon', 'shipping_tier'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  add_payment_info: {
+    required: ['currency', 'value', 'items'],
+    recommended: ['coupon', 'payment_type'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  view_cart: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  add_to_wishlist: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price']
+  },
+  view_promotion: {
+    required: ['items'],
+    recommended: ['creative_name', 'creative_slot', 'promotion_id', 'promotion_name'],
+    itemParams: ['item_id', 'item_name', 'promotion_id', 'promotion_name']
+  },
+  select_promotion: {
+    required: ['items'],
+    recommended: ['creative_name', 'creative_slot', 'promotion_id', 'promotion_name'],
+    itemParams: ['item_id', 'item_name', 'promotion_id', 'promotion_name']
+  },
+  refund: {
+    required: ['transaction_id'],
+    recommended: ['value', 'currency', 'items'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  // Engagement Events
+  login: {
+    required: [],
+    recommended: ['method']
+  },
+  sign_up: {
+    required: [],
+    recommended: ['method']
+  },
+  search: {
+    required: [],
+    recommended: ['search_term']
+  },
+  share: {
+    required: [],
+    recommended: ['method', 'content_type', 'item_id']
+  },
+  generate_lead: {
+    required: [],
+    recommended: ['currency', 'value']
+  },
+  // Page/Screen Events
+  page_view: {
+    required: [],
+    recommended: ['page_title', 'page_location', 'page_referrer']
+  },
+  screen_view: {
+    required: ['screen_name'],
+    recommended: ['screen_class']
+  }
+};
+
+// Valid ISO 4217 Currency Codes (common ones)
+export const VALID_CURRENCIES = [
+  'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'MXN',
+  'BRL', 'KRW', 'RUB', 'TRY', 'ZAR', 'SEK', 'NOK', 'DKK', 'PLN', 'THB',
+  'IDR', 'HKD', 'SGD', 'NZD', 'PHP', 'MYR', 'TWD', 'AED', 'SAR', 'CZK'
+];
+
+// Keyboard Shortcuts
+export const KEYBOARD_SHORTCUTS = {
+  'Ctrl+1': { action: 'switchTab', tab: 'gtm', description: 'Go to GTM tab' },
+  'Ctrl+2': { action: 'switchTab', tab: 'monitor', description: 'Go to Events tab' },
+  'Ctrl+3': { action: 'switchTab', tab: 'network', description: 'Go to Network tab' },
+  'Ctrl+4': { action: 'switchTab', tab: 'audit', description: 'Go to Audit tab' },
+  'Ctrl+5': { action: 'switchTab', tab: 'cookies', description: 'Go to Cookies tab' },
+  'Ctrl+6': { action: 'switchTab', tab: 'consent', description: 'Go to Consent tab' },
+  'Ctrl+7': { action: 'switchTab', tab: 'push', description: 'Go to Tools tab' },
+  'Ctrl+K': { action: 'focusSearch', description: 'Focus search/filter' },
+  'Ctrl+L': { action: 'clearAll', description: 'Clear current view' },
+  'Ctrl+E': { action: 'exportJson', description: 'Export as JSON' },
+  'Ctrl+Shift+E': { action: 'exportCsv', description: 'Export as CSV' },
+  'Ctrl+R': { action: 'refresh', description: 'Refresh current panel' },
+  'Ctrl+D': { action: 'toggleTheme', description: 'Toggle dark/light theme' },
+  'Escape': { action: 'closeModal', description: 'Close modal/popup' }
+};

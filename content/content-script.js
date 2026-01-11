@@ -47,7 +47,10 @@
     } else if (type === 'DATALAYER_EVENT') {
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.DATALAYER_PUSH,
-        data: payload
+        data: {
+          ...payload,
+          url: window.location.href
+        }
       });
     }
   });
@@ -124,6 +127,14 @@
 
       case 'GET_CONSENT_STATE':
         return await sendCommand('GET_CONSENT_STATE');
+
+      case 'GET_CSP':
+        // Get CSP from meta tag (Content-Security-Policy header is not accessible from JS)
+        const cspMeta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+        return { csp: cspMeta?.content || '' };
+
+      case 'DETECT_TECH':
+        return await sendCommand('DETECT_TECH');
 
       case 'GET_PERFORMANCE_METRICS':
         return await sendCommand('GET_PERFORMANCE_METRICS');

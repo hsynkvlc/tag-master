@@ -48,6 +48,199 @@ const PRESETS = {
 };
 
 // ============================================
+// GA4 Event Schema Validator
+// ============================================
+const GA4_EVENT_SCHEMAS = {
+  purchase: {
+    required: ['transaction_id', 'value', 'currency'],
+    recommended: ['tax', 'shipping', 'coupon', 'items'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  add_to_cart: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  remove_from_cart: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  view_item: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price']
+  },
+  view_item_list: {
+    required: ['items'],
+    recommended: ['item_list_id', 'item_list_name'],
+    itemParams: ['item_id', 'item_name', 'index']
+  },
+  select_item: {
+    required: ['items'],
+    recommended: ['item_list_id', 'item_list_name'],
+    itemParams: ['item_id', 'item_name']
+  },
+  begin_checkout: {
+    required: ['currency', 'value', 'items'],
+    recommended: ['coupon'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  add_shipping_info: {
+    required: ['currency', 'value', 'items'],
+    recommended: ['coupon', 'shipping_tier'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  add_payment_info: {
+    required: ['currency', 'value', 'items'],
+    recommended: ['coupon', 'payment_type'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  view_cart: {
+    required: ['currency', 'value', 'items'],
+    recommended: [],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  refund: {
+    required: ['transaction_id'],
+    recommended: ['value', 'currency', 'items'],
+    itemParams: ['item_id', 'item_name', 'price', 'quantity']
+  },
+  login: { required: [], recommended: ['method'] },
+  sign_up: { required: [], recommended: ['method'] },
+  search: { required: [], recommended: ['search_term'] },
+  generate_lead: { required: [], recommended: ['currency', 'value'] }
+};
+
+const VALID_CURRENCIES = [
+  'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'MXN',
+  'BRL', 'KRW', 'RUB', 'TRY', 'ZAR', 'SEK', 'NOK', 'DKK', 'PLN', 'THB'
+];
+
+function validateGA4Event(eventData) {
+  const results = {
+    isValid: true,
+    errors: [],      // Critical issues
+    warnings: [],    // Recommended but missing
+    info: [],        // Helpful tips
+    score: 100       // Validation score
+  };
+
+  const data = eventData?.data || eventData;
+  const eventName = data?.event || data?.eventName;
+
+  if (!eventName) {
+    results.errors.push('Missing "event" property');
+    results.isValid = false;
+    results.score -= 30;
+    return results;
+  }
+
+  const schema = GA4_EVENT_SCHEMAS[eventName];
+  if (!schema) {
+    results.info.push(`Custom event "${eventName}" - no schema validation available`);
+    return results;
+  }
+
+  // Check ecommerce wrapper
+  const ecommerce = data.ecommerce || data;
+  const items = ecommerce.items || data.items;
+
+  // Validate required fields
+  schema.required.forEach(field => {
+    if (field === 'items') {
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        results.errors.push(`Missing required "items" array`);
+        results.isValid = false;
+        results.score -= 20;
+      }
+    } else {
+      const value = ecommerce[field] ?? data[field];
+      if (value === undefined || value === null || value === '') {
+        results.errors.push(`Missing required "${field}"`);
+        results.isValid = false;
+        results.score -= 15;
+      }
+    }
+  });
+
+  // Validate recommended fields
+  schema.recommended.forEach(field => {
+    if (field === 'items') return;
+    const value = ecommerce[field] ?? data[field];
+    if (value === undefined) {
+      results.warnings.push(`Recommended: "${field}" is not set`);
+      results.score -= 5;
+    }
+  });
+
+  // Validate currency format
+  const currency = ecommerce.currency || data.currency;
+  if (currency) {
+    if (typeof currency !== 'string' || currency.length !== 3) {
+      results.errors.push(`Invalid currency format: "${currency}" (should be 3-letter ISO code)`);
+      results.score -= 10;
+    } else if (!VALID_CURRENCIES.includes(currency.toUpperCase())) {
+      results.warnings.push(`Currency "${currency}" may not be recognized`);
+    }
+  }
+
+  // Validate value is a number
+  const value = ecommerce.value ?? data.value;
+  if (value !== undefined) {
+    if (typeof value !== 'number') {
+      results.errors.push(`"value" should be a number, got ${typeof value}`);
+      results.score -= 10;
+    } else if (value < 0) {
+      results.warnings.push(`Negative value: ${value}`);
+    }
+  }
+
+  // Validate items array
+  if (items && Array.isArray(items) && schema.itemParams) {
+    if (items.length === 0) {
+      results.warnings.push('Items array is empty');
+      results.score -= 5;
+    }
+
+    items.forEach((item, idx) => {
+      // Must have item_id OR item_name
+      if (!item.item_id && !item.item_name) {
+        results.errors.push(`Item[${idx}]: needs "item_id" or "item_name"`);
+        results.score -= 10;
+      }
+
+      // Check item params
+      schema.itemParams.forEach(param => {
+        if (param === 'item_id' || param === 'item_name') return; // Already checked
+        if (item[param] === undefined && ['price', 'quantity'].includes(param)) {
+          results.warnings.push(`Item[${idx}]: missing "${param}"`);
+          results.score -= 3;
+        }
+      });
+
+      // Validate item price
+      if (item.price !== undefined && typeof item.price !== 'number') {
+        results.errors.push(`Item[${idx}]: "price" should be a number`);
+        results.score -= 5;
+      }
+
+      // Validate quantity
+      if (item.quantity !== undefined) {
+        if (typeof item.quantity !== 'number' || item.quantity < 0) {
+          results.warnings.push(`Item[${idx}]: invalid quantity`);
+        }
+      }
+    });
+  }
+
+  // Ensure score doesn't go below 0
+  results.score = Math.max(0, results.score);
+
+  return results;
+}
+
+// ============================================
 // State
 // ============================================
 // ============================================
@@ -126,13 +319,26 @@ const elements = {
   refreshConsent: document.getElementById('refreshConsent'),
   consentList: document.getElementById('consentList'),
   consentWarning: document.getElementById('consentWarning'),
+  // CSP
+  refreshCSP: document.getElementById('refreshCSP'),
+  cspResults: document.getElementById('cspResults'),
+  // Tech Stack
+  refreshTech: document.getElementById('refreshTech'),
+  techResults: document.getElementById('techResults'),
   // Theme
   themeToggle: document.getElementById('themeToggle'),
   // Support Link
   mainSupportLink: document.getElementById('mainSupportLink'),
   // Welcome
   welcomeOverlay: document.getElementById('welcomeOverlay'),
-  getStartedBtn: document.getElementById('getStartedBtn')
+  getStartedBtn: document.getElementById('getStartedBtn'),
+  // Timeline
+  timelineSection: document.getElementById('timelineSection'),
+  eventTimeline: document.getElementById('eventTimeline'),
+  showTimeline: document.getElementById('showTimeline'),
+  toggleTimeline: document.getElementById('toggleTimeline'),
+  // HAR Export
+  exportHar: document.getElementById('exportHar')
 };
 
 // Re-verify elements in case some were late-loaded or moved
@@ -284,6 +490,7 @@ elements.tabs.forEach(tab => {
     if (tabName === 'cookies') refreshCookies();
     if (tabName === 'push') renderSnippets();
     if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
+    if (tabName === 'tech') detectTechnologies();
     if (tabName === 'about') verifyElements();
   });
 });
@@ -456,28 +663,223 @@ async function detectContainers(isRetry = false) {
 // Consent Management
 // ============================================
 async function loadConsentState() {
-  const response = await chrome.runtime.sendMessage({ type: 'GET_CONSENT_STATE' });
-  if (response) {
-    renderConsentState(response);
+  console.log('[Swiss Knife] loadConsentState triggered');
+
+  // Show loading
+  elements.consentList.innerHTML = `
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin-animation">
+        <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      <p>Checking consent state...</p>
+    </div>
+  `;
+
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), 3000)
+    );
+
+    const messagePromise = chrome.runtime.sendMessage({ type: 'CONSENT_GET' });
+    const response = await Promise.race([messagePromise, timeoutPromise]) || {};
+
+    console.log('[Swiss Knife] Consent Response (Live):', response);
+
+    // Merge logic: Live Priority > Network Fallback
+    let finalState = { ...response };
+    const latestNetworkState = extractConsentFromNetwork();
+
+    if (latestNetworkState) {
+      Object.keys(latestNetworkState).forEach(key => {
+        // Only override if live value is 'unknown' or missing
+        if (!finalState[key] || finalState[key] === 'unknown') {
+          finalState[key] = latestNetworkState[key];
+          finalState._isFromNetwork = true;
+        }
+      });
+    }
+
+    const hasKeys = finalState && (finalState.ad_storage || finalState.analytics_storage);
+
+    if (hasKeys && !finalState.error) {
+      renderConsentState(finalState);
+    } else {
+      elements.consentList.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <p>Consent Mode not detected in page memory.</p>
+          <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Checking Network requests for signals...</p>
+          <button class="btn btn-secondary btn-small" id="retryConsent" style="margin-top:8px">Scan Again</button>
+        </div>
+      `;
+      document.getElementById('retryConsent')?.addEventListener('click', loadConsentState);
+    }
+  } catch (e) {
+    console.error('[Swiss Knife] Consent fetch error:', e);
+    const lastResort = extractConsentFromNetwork();
+    if (lastResort) {
+      renderConsentState({ ...lastResort, _isFromNetwork: true });
+    } else {
+      elements.consentList.innerHTML = `
+        <div class="empty-state">
+          <p>No consent data found.</p>
+          <button class="btn btn-secondary btn-small" id="retryConsent" style="margin-top:8px">Retry</button>
+        </div>
+      `;
+      document.getElementById('retryConsent')?.addEventListener('click', loadConsentState);
+    }
+  }
+}
+
+/**
+ * Extract consent state from a given list of network requests
+ * Standardized with Network Tab's decoding logic
+ */
+function extractConsentFromNetwork(requests = networkRequests) {
+  if (!requests || requests.length === 0) return null;
+
+  // Find latest hit with gcs or gcd - focus on analytics or google-analytics.com hits
+  const latestWithConsent = [...requests].reverse().find(req => {
+    return (req.url.includes('google-analytics.com') || req.url.includes('analytics.google.com')) &&
+      (req.url.includes('gcs=') || req.url.includes('gcd='));
+  });
+
+  if (!latestWithConsent) return null;
+
+  try {
+    const url = new URL(latestWithConsent.url);
+    const gcs = url.searchParams.get('gcs');
+    const gcd = url.searchParams.get('gcd');
+    const result = {};
+
+    // GCS Mapping: G1<ad><analytics> (1=granted, 0=denied)
+    if (gcs && gcs.length >= 4) {
+      result.ad_storage = gcs.charAt(2) === '1' ? 'granted' : (gcs.charAt(2) === '0' ? 'denied' : 'unknown');
+      result.analytics_storage = gcs.charAt(3) === '1' ? 'granted' : (gcs.charAt(3) === '0' ? 'denied' : 'unknown');
+    }
+
+    // GCD Mapping: 1<ad><analytics><user_data><personalization>...
+    if (gcd && gcd.length >= 10) {
+      const charToStatus = {
+        'r': 'granted', 'v': 'granted', 't': 'granted',
+        'p': 'denied', 'q': 'denied', 'u': 'denied',
+        'l': 'unknown', 'm': 'unknown', 'n': 'unknown'
+      };
+
+      const ad = charToStatus[gcd.charAt(2)];
+      const analytics = charToStatus[gcd.charAt(4)];
+      const userData = charToStatus[gcd.charAt(6)];
+      const personalization = charToStatus[gcd.charAt(8)];
+
+      if (ad) result.ad_storage = ad;
+      if (analytics) result.analytics_storage = analytics;
+      if (userData) result.ad_user_data = userData;
+      if (personalization) result.ad_personalization = personalization;
+    }
+
+    // Only return if we found actual granted/denied values
+    const hasValues = Object.values(result).some(v => v === 'granted' || v === 'denied');
+    return hasValues ? result : null;
+  } catch (e) {
+    return null;
   }
 }
 
 function renderConsentState(state) {
-  const items = Object.entries(state);
-  const isV2Ready = state.ad_user_data !== 'unknown' && state.ad_personalization !== 'unknown';
+  console.log('[Swiss Knife] Rendering consent state:', state);
+
+  // Validate state
+  if (!state || typeof state !== 'object' || state.error) {
+    console.warn('[Swiss Knife] Invalid consent state:', state);
+    elements.consentList.innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <p>No consent data available</p>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">${state?.error || 'Consent Mode not detected'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Sort keys to ensure consistent order: storage first, then user_data/personalization
+  const orderedKeys = [
+    'ad_storage',
+    'analytics_storage',
+    'ad_user_data',
+    'ad_personalization',
+    'functionality_storage',
+    'personalization_storage',
+    'security_storage'
+  ];
+
+  // Extract metadata
+  const metadata = state._metadata || {};
+  const isFromNetwork = state._isFromNetwork;
+
+  // Merge with any other keys that might exist (excluding metadata and internal flags)
+  const allKeys = Array.from(new Set([...orderedKeys, ...Object.keys(state)]))
+    .filter(k => k !== '_metadata' && k !== '_isFromNetwork' && k !== 'error');
+
+  const isV2Ready = state.ad_user_data && state.ad_user_data !== 'unknown' &&
+    state.ad_personalization && state.ad_personalization !== 'unknown';
+
+  // Source Info
+  const sourceInfo = isFromNetwork ? `
+    <div style="margin: -4px 0 12px 0; display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--accent-blue);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      <span>Source: Decoded from Network Hits (Most Reliable)</span>
+    </div>
+  ` : `
+    <div style="margin: -4px 0 12px 0; display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--success-green);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <span>Source: Live Page State (Internal Memory)</span>
+    </div>
+  `;
+
+  // Show blocking mode warning
+  let blockingWarning = '';
+  if (metadata.isBlocking) {
+    blockingWarning = `
+      <div style="margin-bottom:12px;padding:10px;background:rgba(251,188,4,0.1);border:1px solid var(--warning-yellow);border-radius:6px;font-size:11px;color:var(--text-primary)">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning-yellow)" stroke-width="2" style="width:14px;height:14px">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <strong style="color:var(--warning-yellow)">⏳ Blocking Mode Active</strong>
+        </div>
+        <div style="font-size:10px;line-height:1.4">
+          Google tags (GTM, GA4, Ads) are currently <strong>blocked</strong> and waiting for user consent. 
+          Cookies like <code>_ga</code>, <code>_gid</code>, <code>_gcl</code> will not be set until consent is granted.
+        </div>
+      </div>
+    `;
+  }
 
   if (elements.consentWarning) {
     elements.consentWarning.style.display = isV2Ready ? 'none' : 'block';
   }
 
-  elements.consentList.innerHTML = items.map(([key, value]) => {
+  elements.consentList.innerHTML = sourceInfo + blockingWarning + allKeys.map(key => {
+    // Only render if key exists in state
+    if (!(key in state)) return '';
+
+    const value = state[key];
     const isGranted = value === 'granted';
     const isUnknown = value === 'unknown';
 
+    // Format key: ad_storage -> AD STORAGE
+    const label = key.replace(/_/g, ' ').toUpperCase();
+
     return `
-      <div class="container-item" style="padding: 8px 12px">
-        <div style="font-size: 11px; font-weight: 500">${key.replace('_storage', '')}</div>
-        <div class="badge" style="background:${isUnknown ? 'var(--bg-hover)' : (isGranted ? 'var(--success-green)' : 'var(--error-red)')}; color: white; font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase">
+      <div class="container-item" style="display:flex;flex-direction:column;padding:12px;gap:6px;align-items:flex-start">
+        <div style="font-size:10px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">${label}</div>
+        <div style="font-size:13px;font-weight:700;color:${isUnknown ? 'var(--text-muted)' : (isGranted ? 'var(--success-green)' : 'var(--error-red)')};text-transform:uppercase">
           ${value}
         </div>
       </div>
@@ -489,6 +891,307 @@ if (elements.refreshConsent) {
   elements.refreshConsent.addEventListener('click', loadConsentState);
 }
 
+// ============================================
+// CSP Compatibility Checker
+// ============================================
+const CSP_REQUIREMENTS = {
+  'GTM Core': {
+    'script-src': ['*.googletagmanager.com'],
+    'img-src': ['www.googletagmanager.com'],
+    'connect-src': ['www.googletagmanager.com', 'www.google.com']
+  },
+  'GA4': {
+    'script-src': ['*.googletagmanager.com'],
+    'img-src': ['*.google-analytics.com', '*.googletagmanager.com'],
+    'connect-src': ['*.google-analytics.com', '*.analytics.google.com', '*.googletagmanager.com']
+  },
+  'Google Ads': {
+    'script-src': ['www.googleadservices.com', 'www.googletagmanager.com', 'googleads.g.doubleclick.net'],
+    'img-src': ['www.googleadservices.com', 'googleads.g.doubleclick.net', 'www.google.com'],
+    'connect-src': ['www.googleadservices.com', 'googleads.g.doubleclick.net'],
+    'frame-src': ['www.googletagmanager.com', 'bid.g.doubleclick.net']
+  },
+  'Floodlight': {
+    'img-src': ['ad.doubleclick.net', 'ade.googlesyndication.com'],
+    'frame-src': ['ad.doubleclick.net', 'ade.googlesyndication.com'],
+    'connect-src': ['ad.doubleclick.net', 'ade.googlesyndication.com']
+  }
+};
+
+async function checkCSP() {
+  if (!elements.cspResults) return;
+
+  const stopSpinner = () => {
+    if (elements.refreshCSP) {
+      elements.refreshCSP.querySelector('svg').classList.remove('spin-animation');
+    }
+  };
+
+  if (elements.refreshCSP) {
+    elements.refreshCSP.querySelector('svg').classList.add('spin-animation');
+  }
+
+  try {
+    // Get CSP from the page
+    const response = await chrome.runtime.sendMessage({ type: 'GET_CSP' });
+    const csp = response?.csp || '';
+
+    if (!csp) {
+      elements.cspResults.innerHTML = `
+        <div class="container-item" style="background:rgba(34,197,94,0.1);border-left:3px solid var(--success-green)">
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:12px;color:var(--success-green);display:flex;align-items:center;gap:6px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12" /></svg>
+              No CSP Restrictions
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+              This page has no Content Security Policy. All Google tags should work without restrictions.
+            </div>
+          </div>
+        </div>
+      `;
+      stopSpinner();
+      return;
+    }
+
+    // Parse CSP directives
+    const directives = {};
+    csp.split(';').forEach(part => {
+      const trimmed = part.trim();
+      if (!trimmed) return;
+      const [directive, ...values] = trimmed.split(/\s+/);
+      directives[directive.toLowerCase()] = values;
+    });
+
+    // Check each requirement
+    const results = [];
+    for (const [product, requirements] of Object.entries(CSP_REQUIREMENTS)) {
+      const issues = [];
+      const passed = [];
+
+      for (const [directive, domains] of Object.entries(requirements)) {
+        const allowedSources = directives[directive] || [];
+        const defaultSrc = directives['default-src'] || [];
+        const effectiveSources = allowedSources.length > 0 ? allowedSources : defaultSrc;
+
+        for (const domain of domains) {
+          const isAllowed = effectiveSources.some(src => {
+            if (src === "'none'") return false;
+            if (src === '*') return true;
+            if (src === "'self'") return false;
+            // Check wildcard matching
+            const srcDomain = src.replace(/^https?:\/\//, '');
+            const checkDomain = domain.replace(/^\*\./, '');
+            if (srcDomain.startsWith('*.')) {
+              return checkDomain.endsWith(srcDomain.slice(1)) || checkDomain === srcDomain.slice(2);
+            }
+            return srcDomain === checkDomain || srcDomain === domain || src.includes(checkDomain);
+          });
+
+          if (isAllowed) {
+            passed.push({ directive, domain });
+          } else {
+            issues.push({ directive, domain });
+          }
+        }
+      }
+
+      results.push({ product, issues, passed });
+    }
+
+    // Render results
+    elements.cspResults.innerHTML = results.map(({ product, issues, passed }) => {
+      const hasIssues = issues.length > 0;
+      const statusColor = hasIssues ? 'var(--error-red)' : 'var(--success-green)';
+      const statusIcon = hasIssues
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"/></svg>';
+
+      const issuesList = hasIssues
+        ? `<div style="margin-top:6px;font-size:10px;color:var(--error-red)">
+            ${issues.slice(0, 3).map(i => `<div>• Missing: <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px">${i.domain}</code> in ${i.directive}</div>`).join('')}
+            ${issues.length > 3 ? `<div style="color:var(--text-muted)">+${issues.length - 3} more issues</div>` : ''}
+          </div>`
+        : '';
+
+      return `
+        <div class="container-item" style="border-left:3px solid ${statusColor}">
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:12px;color:${statusColor};display:flex;align-items:center;gap:6px">
+              ${statusIcon}
+              ${product}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+              ${hasIssues ? `${issues.length} blocked domain(s)` : 'All domains allowed'}
+            </div>
+            ${issuesList}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (e) {
+    console.error('CSP Check failed:', e);
+    elements.cspResults.innerHTML = `
+      < div class="empty-state" >
+        <p style="color:var(--error-red)">Failed to check CSP</p>
+      </div >
+      `;
+  }
+
+  stopSpinner();
+}
+
+if (elements.refreshCSP) {
+  elements.refreshCSP.addEventListener('click', checkCSP);
+}
+
+// ============================================
+// Technology Stack Detector
+// ============================================
+// Tech signatures are handled in page-script.js
+// We only render what we receive
+
+
+let techCache = null;
+let techLastDetect = 0;
+
+async function detectTechnologies(forceRefresh = false) {
+  if (!elements.techResults) return;
+
+  const stopSpinner = () => {
+    if (elements.refreshTech) {
+      elements.refreshTech.querySelector('svg').classList.remove('spin-animation');
+    }
+  };
+
+  // Use cache if same tab and recent (within 5 seconds) and not forced
+  const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!forceRefresh && techCache && techCache.tabId === currentTab?.id && (Date.now() - techCache.timestamp < 5000)) {
+    renderTechResults(techCache.data);
+    return;
+  }
+
+  if (elements.refreshTech) {
+    elements.refreshTech.querySelector('svg').classList.add('spin-animation');
+  }
+
+  // Show loading state
+  elements.techResults.innerHTML = `
+    <div class="empty-state">
+      <p>Scanning technologies...</p>
+    </div>
+  `;
+
+  try {
+    // Try multiple times with delay for late-loading scripts
+    let detected = [];
+    let attempts = 0;
+    const maxAttempts = forceRefresh ? 3 : 2;
+
+    while (attempts < maxAttempts) {
+      const response = await chrome.runtime.sendMessage({ type: 'DETECT_TECH' });
+      const newDetected = response?.technologies || [];
+
+      // Merge results
+      newDetected.forEach(tech => {
+        if (!detected.find(d => d.name === tech.name)) {
+          detected.push(tech);
+        }
+      });
+
+      attempts++;
+
+      // If we found some, and it's not a force refresh, stop early
+      if (detected.length > 0 && !forceRefresh) break;
+
+      // Wait before retry
+      if (attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    techCache = {
+      tabId: currentTab?.id,
+      data: detected,
+      timestamp: Date.now()
+    };
+    techLastDetect = Date.now();
+
+    renderTechResults(detected);
+
+  } catch (e) {
+    console.error('Tech detection failed:', e);
+    elements.techResults.innerHTML = `
+      <div class="empty-state">
+        <p style="color:var(--error-red)">Detection failed</p>
+      </div>
+    `;
+  }
+
+  stopSpinner();
+}
+
+function renderTechResults(detected) {
+  if (detected.length === 0) {
+    elements.techResults.innerHTML = `
+      <div class="empty-state">
+        <p>No technologies detected</p>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Try refreshing the page first</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Group by category with custom order
+  const categoryOrder = [
+    'Tag Management', 'Analytics', 'Marketing', 'Advertising', 'A/B Testing',
+    'JavaScript Framework', 'JavaScript Library', 'CSS Framework',
+    'CMS', 'E-commerce', 'Customer Support', 'Payment', 'Security', 'CDN', 'Fonts', 'Other'
+  ];
+
+  const grouped = {};
+  detected.forEach(tech => {
+    const cat = tech.category || 'Other';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(tech);
+  });
+
+  // Sort categories by custom order
+  const sortedCategories = Object.keys(grouped).sort((a, b) => {
+    const aIdx = categoryOrder.indexOf(a);
+    const bIdx = categoryOrder.indexOf(b);
+    return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+  });
+
+  elements.techResults.innerHTML = `
+    <div style="margin-bottom:10px;padding:8px 10px;background:var(--bg-secondary);border-radius:6px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;color:var(--text-secondary)">Found <strong style="color:var(--accent-blue)">${detected.length}</strong> technologies</span>
+      <span style="font-size:10px;color:var(--text-muted)">${new Date().toLocaleTimeString()}</span>
+    </div>
+  ` + sortedCategories.map(category => `
+    <div style="margin-bottom:12px">
+      <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">${category} (${grouped[category].length})</div>
+      ${grouped[category].map(tech => `
+        <div class="container-item" style="margin-bottom:4px;padding:8px 10px">
+          <div style="display:flex;align-items:center;gap:8px;flex:1">
+            <span style="font-size:16px">${tech.icon}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:12px;color:var(--text-primary)">${tech.name}</div>
+              ${tech.version ? `<div style="font-size:10px;color:var(--accent-blue)">v${tech.version}</div>` : ''}
+              ${tech.details ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px">${tech.details}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+if (elements.refreshTech) {
+  elements.refreshTech.addEventListener('click', () => detectTechnologies(true));
+}
+
 elements.refreshContainers.addEventListener('click', () => {
   detectionRetries = 0;
   detectContainers(false);
@@ -498,64 +1201,168 @@ elements.refreshContainers.addEventListener('click', () => {
 // DataLayer Monitor
 // ============================================
 function renderEvents() {
-  const filter = elements.eventFilter.value.toLowerCase();
-  const filtered = events.filter(e =>
-    !filter || JSON.stringify(e.data).toLowerCase().includes(filter)
-  );
+  const filter = elements.eventFilter.value.toLowerCase().trim();
+  const filtered = events.filter(e => {
+    if (!filter) return true;
+    const data = e.data?.data || e.data || e;
+    // Event name is stored in e.event (from service worker) or inside data
+    const eventName = (e.event || data?.event || data?.['0'] || e.eventName || 'push').toLowerCase();
+    const jsonStr = JSON.stringify(data).toLowerCase();
+
+    // Support regex patterns with | for OR matching
+    if (filter.includes('|')) {
+      try {
+        const regex = new RegExp(filter, 'i');
+        return regex.test(eventName) || regex.test(jsonStr);
+      } catch (err) {
+        // Invalid regex, fall back to includes
+        return eventName.includes(filter) || jsonStr.includes(filter);
+      }
+    }
+    return eventName.includes(filter) || jsonStr.includes(filter);
+  });
 
   if (filtered.length > 0) {
-    elements.eventList.innerHTML = filtered.slice().reverse().map(event => {
-      // Validation Logic
-      let warnings = [];
-      const data = event.data?.data || event.data || event; // Try various depths
-      const eventName = data?.event || data?.['0'] || event.eventName || 'push';
-      const jsonString = JSON.stringify(data, null, 2);
+    // Group events by URL (Pathname)
+    const groupedGroups = []; // Array of { url: string, events: [] }
+    let currentGroup = null;
 
-      const ecEvents = ['purchase', 'add_to_cart', 'begin_checkout', 'view_item', 'view_item_list', 'select_item', 'remove_from_cart', 'add_to_wishlist'];
-      if (ecEvents.includes(eventName)) {
-        const ecommerce = data.ecommerce || data;
-        const items = ecommerce.items || data.items;
+    // Process events in reverse order (newest first)
+    const reversedEvents = filtered.slice().reverse();
 
-        if (!items || !Array.isArray(items) || items.length === 0) {
-          warnings.push('Missing "items" array');
-        } else {
-          // Check first item for common issues
-          const firstItem = items[0];
-          if (!firstItem.item_id && !firstItem.item_name) warnings.push('Item needs id or name');
-          if (firstItem.price === undefined) warnings.push('Item missing price');
-        }
+    reversedEvents.forEach(event => {
+      const data = event.data?.data || event.data || event;
 
-        if (eventName === 'purchase') {
-          if (!ecommerce.transaction_id) warnings.push('Missing "transaction_id"');
-          if (ecommerce.value === undefined) warnings.push('Missing "value"');
-          if (!ecommerce.currency) warnings.push('Missing "currency"');
-        }
+      // Improved URL detection logic
+      // event.pageUrl comes from service worker (sender.tab.url)
+      // data.url comes from content script payload
+      let urlStr = event.pageUrl || data.url || event.url;
+
+      // Fallback for GA4/GTM standard fields
+      if (!urlStr) {
+        urlStr = data.page_location || data.dl;
       }
 
-      const validationHtml = warnings.length > 0 ? `
-         <div class="validation-warning">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            ${warnings.join(', ')}
-         </div>
-       ` : '';
+      if (!urlStr || urlStr === 'undefined') {
+        urlStr = 'Unknown Page';
+      }
+
+      let pathname = urlStr;
+      try {
+        if (urlStr !== 'Unknown Page') {
+          pathname = new URL(urlStr).pathname;
+        }
+      } catch { }
+
+      // If URL changed from previous event in this sorted list, start new group
+      if (!currentGroup || currentGroup.pathname !== pathname) {
+        currentGroup = {
+          pathname: pathname,
+          fullUrl: urlStr,
+          events: []
+        };
+        groupedGroups.push(currentGroup);
+      }
+      currentGroup.events.push(event);
+    });
+
+    elements.eventList.innerHTML = groupedGroups.map((group, groupIdx) => `
+      <div class="event-group" style="margin-bottom:12px">
+        <div class="group-header" data-group-index="${groupIdx}" style="
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          background: var(--bg-secondary);
+          padding: 6px 10px;
+          border-bottom: 1px solid var(--border);
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--accent-blue);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          cursor: pointer;
+          user-select: none;
+        " title="Click to toggle events for this page">
+          <div style="display:flex;align-items:center;gap:6px;overflow:hidden">
+             <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;transition:transform 0.2s;transform:rotate(0deg)">
+               <polyline points="6 9 12 15 18 9"/>
+             </svg>
+             <span title="${group.fullUrl}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${group.pathname}</span>
+          </div>
+          <span style="font-size:9px;color:var(--text-muted);background:var(--bg-primary);padding:2px 6px;border-radius:10px">${group.events.length}</span>
+        </div>
+        <div class="group-items" id="group-items-${groupIdx}" style="display:block">
+          ${group.events.map(event => {
+      const data = event.data?.data || event.data || event;
+      const eventName = data?.event || data?.['0'] || event.eventName || 'push';
+      const jsonString = JSON.stringify(data, null, 2);
+      const validation = validateGA4Event(data);
+
+      let validationHtml = '';
+      if (validation.errors.length > 0 || validation.warnings.length > 0) {
+        const scoreColor = validation.score >= 80 ? 'var(--success-green)' :
+          (validation.score >= 50 ? 'var(--warning-yellow)' : 'var(--error-red)');
+
+        validationHtml = `
+          <div class="validation-panel" style="margin:8px 0;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid ${scoreColor}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:10px;font-weight:600;color:var(--text-secondary)">Schema Validation</span>
+              <span style="font-size:11px;font-weight:bold;color:${scoreColor}">Score: ${validation.score}/100</span>
+            </div>
+            ${validation.errors.length > 0 ? `
+              <div style="margin-bottom:6px">
+                ${validation.errors.map(err => `
+                  <div style="display:flex;align-items:flex-start;gap:6px;font-size:10px;color:var(--error-red);margin-bottom:3px">
+                    <span style="flex-shrink:0">✗</span>
+                    <span>${err}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+            ${validation.warnings.length > 0 ? `
+              <div>
+                ${validation.warnings.slice(0, 3).map(warn => `
+                  <div style="display:flex;align-items:flex-start;gap:6px;font-size:10px;color:var(--warning-yellow);margin-bottom:3px">
+                    <span style="flex-shrink:0">⚠</span>
+                    <span>${warn}</span>
+                  </div>
+                `).join('')}
+                ${validation.warnings.length > 3 ? `<div style="font-size:9px;color:var(--text-muted)">+${validation.warnings.length - 3} more warnings</div>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      } else if (GA4_EVENT_SCHEMAS[eventName]) {
+        validationHtml = `
+          <div style="margin:8px 0;padding:6px 10px;background:rgba(34,197,94,0.1);border-radius:4px;border-left:3px solid var(--success-green);display:flex;align-items:center;gap:6px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--success-green)" stroke-width="2" style="width:12px;height:12px"><polyline points="20 6 9 17 4 12"/></svg>
+            <span style="font-size:10px;color:var(--success-green);font-weight:500">Valid GA4 Event (100/100)</span>
+          </div>
+        `;
+      }
 
       return `
-      <div class="event-item expanded" data-id="${event.id}">
-        <div class="event-header">
-           <div style="display:flex;flex-direction:column;gap:2px">
-             <span style="font-size:10px;color:var(--text-secondary)">${formatTimestamp(event.timestamp)}</span>
-             <span class="event-name">${eventName}</span>
-           </div>
-           <div class="event-actions">
-              <button class="copy-btn" title="Copy JSON" data-json='${jsonString.replace(/'/g, "&apos;")}'>
-                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              </button>
-           </div>
+            <div class="event-item" data-id="${event.id}">
+              <div class="event-header" style="cursor: pointer;">
+                 <div style="display:flex;flex-direction:column;gap:2px">
+                   <span style="font-size:10px;color:var(--text-secondary)">${formatTimestamp(event.timestamp)}</span>
+                   <span class="event-name">${eventName}</span>
+                 </div>
+                 <div class="event-actions">
+                    <button class="copy-btn" title="Copy JSON" data-json='${jsonString.replace(/'/g, "&apos;")}'>
+                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2h1"/></svg>
+                    </button>
+                 </div>
+              </div>
+              ${validationHtml}
+              <div class="event-details" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">${jsonString}</div>
+            </div>
+          `;
+    }).join('')}
         </div>
-        ${validationHtml}
-        <div class="event-details">${jsonString}</div>
-      </div>
-    `}).join('');
+      </div >
+      `).join('');
 
     // Attach Listeners
     elements.eventList.querySelectorAll('.copy-btn').forEach(btn => {
@@ -580,6 +1387,20 @@ function renderEvents() {
       });
     });
 
+    // Toggle event groups (pages)
+    elements.eventList.querySelectorAll('.group-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const idx = header.dataset.groupIndex;
+        const items = document.getElementById(`group-items-${idx}`);
+        const chevron = header.querySelector('.group-chevron');
+        if (items) {
+          const isVisible = items.style.display !== 'none';
+          items.style.display = isVisible ? 'none' : 'block';
+          if (chevron) chevron.style.transform = isVisible ? 'rotate(-90deg)' : 'rotate(0deg)';
+        }
+      });
+    });
+
   } else {
     elements.eventList.innerHTML = `
       <div class="empty-state">
@@ -590,8 +1411,8 @@ function renderEvents() {
         </svg>
         <p>No dataLayer events yet</p>
         <p style="font-size:11px;margin-top:4px">Events will appear here</p>
-      </div>
-    `;
+      </div >
+      `;
   }
 }
 
@@ -605,7 +1426,11 @@ elements.clearEvents.addEventListener('click', () => {
 
 async function loadEvents() {
   try {
-    const result = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.DATALAYER_GET });
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const result = await chrome.runtime.sendMessage({
+      type: MESSAGE_TYPES.DATALAYER_GET,
+      tabId: tab?.id
+    });
     if (Array.isArray(result)) {
       events = result;
       renderEvents();
@@ -639,25 +1464,71 @@ const GA4_PARAMS = {
 };
 
 function renderNetworkRequests() {
-  const filter = elements.networkFilter?.value?.toLowerCase() || '';
-  const filtered = networkRequests.filter(req =>
-    !filter || req.url.toLowerCase().includes(filter) || (req.typeName || req.type).toLowerCase().includes(filter)
-  );
+  // Enhanced filtering with Regex support
+  const filter = elements.networkFilter?.value?.toLowerCase().trim() || '';
 
-  // Update Stats
+  const filtered = networkRequests.filter(req => {
+    if (!filter) return true;
+    const searchStr = (req.url + ' ' + (req.typeName || '') + ' ' + req.type).toLowerCase();
+
+    // Support regex patterns like "ads|doubleclick"
+    if (filter.includes('|')) {
+      try {
+        const regex = new RegExp(filter, 'i');
+        return regex.test(searchStr);
+      } catch (e) {
+        return searchStr.includes(filter);
+      }
+    }
+    return searchStr.includes(filter);
+  });
+
+  // Update Stats with Clickable Chips
   if (elements.networkStats) {
-    const stats = {
-      GA4: networkRequests.filter(r => r.type.includes('GA4')).length,
-      GTM: networkRequests.filter(r => r.type === 'GTM_JS').length,
-      Server: networkRequests.filter(r => r.isServerSide).length,
-      Total: networkRequests.length
-    };
+    const stats = [
+      { label: 'Total', count: networkRequests.length, filter: '' },
+      { label: 'GA4', count: networkRequests.filter(r => r.type.includes('GA4')).length, filter: 'ga4' },
+      { label: 'GAds', count: networkRequests.filter(r => (r.type.includes('ADS') || r.type.includes('DOUBLECLICK') || r.type.includes('CONVERSION')) && !r.type.includes('GA4')).length, filter: 'ads|doubleclick' },
+      { label: 'GTM', count: networkRequests.filter(r => r.type === 'GTM_JS').length, filter: 'gtm.js' }
+    ];
 
-    elements.networkStats.innerHTML = Object.entries(stats).map(([label, count]) => `
-      <div style="background:var(--bg-secondary);padding:6px 10px;border-radius:6px;border:1px solid var(--border);white-space:nowrap;font-size:10px">
-        <span style="color:var(--text-muted)">${label}:</span> <span style="font-weight:bold;color:var(--accent-blue)">${count}</span>
+    elements.networkStats.innerHTML = stats.map(s => `
+      <div class="stat-chip" 
+           data-filter="${s.filter}" 
+           style="background: ${elementFilterMatch(filter, s.filter) ? 'var(--accent-blue)' : 'var(--bg-secondary)'}; 
+                  padding: 6px 10px; 
+                  border-radius: 6px; 
+                  border: 1px solid ${elementFilterMatch(filter, s.filter) ? 'var(--accent-blue)' : 'var(--border)'}; 
+                  white-space: nowrap; 
+                  font-size: 10px; 
+                  cursor: pointer; 
+                  display: flex; 
+                  align-items: center; 
+                  gap: 4px; 
+                  transition: all 0.2s; 
+                  color: ${elementFilterMatch(filter, s.filter) ? 'white' : 'inherit'};">
+        <span style="color:${elementFilterMatch(filter, s.filter) ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)'}">${s.label}:</span>
+        <span style="font-weight:bold;color:${elementFilterMatch(filter, s.filter) ? 'white' : 'var(--accent-blue)'}">${s.count}</span>
       </div>
     `).join('');
+
+    // Attach Click Listeners
+    elements.networkStats.querySelectorAll('.stat-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        if (elements.networkFilter) {
+          // Toggle off if already selected
+          const newFilter = chip.dataset.filter;
+          elements.networkFilter.value = (elements.networkFilter.value === newFilter) ? '' : newFilter;
+          renderNetworkRequests();
+        }
+      });
+    });
+  }
+
+  // Helper for active state
+  function elementFilterMatch(current, target) {
+    if (!target && !current) return true;
+    return current === target;
   }
 
   if (filtered.length > 0) {
@@ -709,7 +1580,7 @@ function renderNetworkRequests() {
       const isExpanded = expandedNetworkItems.has(req.id);
 
       return `
-      <div class="network-item" data-id="${req.id}" style="border-left: 3px solid ${isExpanded ? 'var(--accent-blue)' : (req.typeColor || '#ccc')}">
+        <div class="network-item" data-id="${req.id}" style="border-left: 3px solid ${isExpanded ? 'var(--accent-blue)' : (req.typeColor || '#ccc')}">
         <div class="network-header">
            <span class="network-method ${req.method}">${req.method || 'GET'}</span>
            <span class="network-type">${req.typeName || (req.type === 'GA4' ? 'Google Analytics 4' : req.type)}</span>
@@ -718,34 +1589,113 @@ function renderNetworkRequests() {
         </div>
         <div class="network-url" title="${req.url}">${urlObj.pathname}</div>
         ${badgeHtml}
-        <div class="network-details" style="display:${isExpanded ? 'block' : 'none'}">
-            <div style="margin-bottom:12px;display:flex;flex-direction:column;gap:8px">
-               ${req.hasEnhancedConversions ? `
-                 <div class="validation-warning" style="background:rgba(34,197,94,0.1);color:var(--success-green);border-color:rgba(34,197,94,0.3)">
-                   <strong>Enhanced Conversions Detected</strong>
-                   <ul style="margin-left:14px;font-size:10px">
-                     ${Object.keys(req.ecValidation.fields).map(f => `<li>${f}: ${req.ecValidation.fields[f].type}</li>`).join('')}
-                   </ul>
-                 </div>
-               ` : ''}
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <span style="color:var(--text-secondary);font-weight:600">Request Details</span>
-              <button class="btn-icon btn-small copy-curl" data-url="${req.url}" title="Copy URL">
-                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-              </button>
-            </div>
-            <div style="word-break:break-all;color:var(--text-primary);font-family:'Consolas',monospace;font-size:11px;margin-bottom:12px;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px">${req.url}</div>
-            
-            ${paramRows.length ? `
-              <div style="margin-bottom:8px;color:var(--text-secondary);font-size:11px;font-weight:600">Parameters (${urlObj.searchParams.size})</div>
-              <div class="network-params" style="border:1px solid var(--border);border-radius:6px;background:var(--bg-surface)">
-                ${paramRows.join('')}
+    <div class="network-details" style="display:${isExpanded ? 'block' : 'none'}">
+      <div style="margin-bottom:12px;display:flex;flex-direction:column;gap:8px">
+        ${req.hasEnhancedConversions ? `
+                   <div class="validation-warning" style="background:rgba(34,197,94,0.05);color:var(--text-primary);border-color:rgba(34,197,94,0.2);display:block">
+                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--success-green)">
+                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                       <strong style="font-size:11px">Enhanced Conversions Detected</strong>
+                     </div>
+                     <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(120px, 1fr));gap:6px">
+                       ${Object.keys(req.ecValidation.fields).map(f => {
+        const fieldMap = {
+          'em': 'Email', 'ph': 'Phone', 'fn': 'First Name', 'ln': 'Last Name',
+          'ct': 'City', 'st': 'State', 'zp': 'Zip Code', 'country': 'Country',
+          'ge': 'Gender', 'db': 'Date of Birth'
+        };
+        const fieldData = req.ecValidation.fields[f];
+        const isValid = fieldData.valid;
+        const icon = isValid ?
+          '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success-green)" stroke-width="2" style="width:10px;height:10px"><polyline points="20 6 9 17 4 12"/></svg>' :
+          '<svg viewBox="0 0 24 24" fill="none" stroke="var(--warning-yellow)" stroke-width="2" style="width:10px;height:10px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></svg>';
+
+        return `
+                           <div style="background:var(--bg-primary);padding:4px 8px;border-radius:4px;border:1px solid ${isValid ? 'var(--border-light)' : 'var(--warning-yellow)'};font-size:10px;display:flex;align-items:center;justify-content:space-between">
+                             <span style="color:var(--text-secondary)">${fieldMap[f] || f}</span>
+                             <div style="display:flex;align-items:center;gap:4px">
+                               <span style="font-family:monospace;opacity:0.8">${fieldData.type}</span>
+                               ${icon}
+                             </div>
+                           </div>
+                         `;
+      }).join('')}
+                     </div>
+                   </div>
+                 ` : ''}
+
+        ${isGA4 && (urlObj.searchParams.get('gcs') || urlObj.searchParams.get('gcd')) ? `
+              <div class="validation-warning" style="background:rgba(66,133,244,0.05);color:var(--text-primary);border-color:rgba(66,133,244,0.2);display:block;margin-top:8px">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--accent-blue)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <strong style="font-size:11px">Consent State (Reported)</strong>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                  ${(() => {
+            const gcs = urlObj.searchParams.get('gcs');
+            const gcd = urlObj.searchParams.get('gcd');
+            let html = '';
+
+            if (gcs) {
+              const ad = gcs.charAt(2) === '1' ? 'Granted' : (gcs.charAt(2) === '0' ? 'Denied' : 'Not Set');
+              const analytics = gcs.charAt(3) === '1' ? 'Granted' : (gcs.charAt(3) === '0' ? 'Denied' : 'Not Set');
+              html += `
+                        <div style="background:var(--bg-primary);padding:4px 8px;border-radius:4px;border:1px solid var(--border-light);font-size:10px">
+                          <span style="color:var(--text-secondary);display:block;font-size:9px">AD_STORAGE</span>
+                          <span style="font-weight:600;color:${ad === 'Granted' ? 'var(--success-green)' : 'var(--error-red)'}">${ad}</span>
+                        </div>
+                        <div style="background:var(--bg-primary);padding:4px 8px;border-radius:4px;border:1px solid var(--border-light);font-size:10px">
+                          <span style="color:var(--text-secondary);display:block;font-size:9px">ANALYTICS_STORAGE</span>
+                          <span style="font-weight:600;color:${analytics === 'Granted' ? 'var(--success-green)' : 'var(--error-red)'}">${analytics}</span>
+                        </div>
+                      `;
+            }
+
+            if (gcd) {
+              // Extract mapping
+              const charToStatus = {
+                'p': 'Denied', 'q': 'Denied', 'r': 'Granted',
+                't': 'Granted', 'u': 'Denied', 'v': 'Granted', 'l': '-'
+              };
+              const ad = charToStatus[gcd.charAt(2)] || 'Unknown';
+              const analytics = charToStatus[gcd.charAt(4)] || 'Unknown';
+              const userData = charToStatus[gcd.charAt(6)] || 'Unknown';
+              const personalization = charToStatus[gcd.charAt(8)] || 'Unknown';
+
+              html += `
+                        <div style="background:var(--bg-primary);padding:4px 8px;border-radius:4px;border:1px solid var(--border-light);font-size:10px">
+                          <span style="color:var(--text-secondary);display:block;font-size:9px">AD_USER_DATA</span>
+                          <span style="font-weight:600;color:${userData === 'Granted' ? 'var(--success-green)' : 'var(--error-red)'}">${userData}</span>
+                        </div>
+                        <div style="background:var(--bg-primary);padding:4px 8px;border-radius:4px;border:1px solid var(--border-light);font-size:10px">
+                          <span style="color:var(--text-secondary);display:block;font-size:9px">AD_PERSONALIZATION</span>
+                          <span style="font-weight:600;color:${personalization === 'Granted' ? 'var(--success-green)' : 'var(--error-red)'}">${personalization}</span>
+                        </div>
+                      `;
+            }
+            return html || '<span style="font-size:10px;color:var(--text-muted)">No consent data in hit</span>';
+          })()}
+                </div>
               </div>
             ` : ''}
-        </div>
       </div>
-    `}).join('');
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:var(--text-secondary);font-weight:600">Request Details</span>
+        <button class="btn-icon btn-small copy-curl" data-url="${req.url}" title="Copy URL">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" ry="1" /></svg>
+        </button>
+      </div>
+      <div style="word-break:break-all;color:var(--text-primary);font-family:'Consolas',monospace;font-size:11px;margin-bottom:12px;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px">${req.url}</div>
+
+      ${paramRows.length ? `
+                <div style="margin-bottom:8px;color:var(--text-secondary);font-size:11px;font-weight:600">Parameters (${urlObj.searchParams.size})</div>
+                <div class="network-params" style="border:1px solid var(--border);border-radius:6px;background:var(--bg-surface)">
+                  ${paramRows.join('')}
+                </div>
+              ` : ''}
+    </div>
+      </div >
+      `}).join('');
 
     elements.networkList.querySelectorAll('.copy-curl').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -776,15 +1726,15 @@ function renderNetworkRequests() {
     });
   } else {
     elements.networkList.innerHTML = `
-      <div class="empty-state">
+      < div class="empty-state" >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px">
           <circle cx="12" cy="12" r="10"></circle>
           <line x1="2" y1="12" x2="22" y2="12"></line>
           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
         </svg>
         <p>No network requests</p>
-      </div>
-    `;
+      </div >
+      `;
   }
 }
 
@@ -904,10 +1854,21 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === MESSAGE_TYPES.DATALAYER_PUSH) {
     events.push(message.data);
     renderEvents();
+    // Check real-time alerts
+    checkAlertRules(message.data);
+    // Update timeline if visible
+    if (elements.timelineSection?.style.display !== 'none') {
+      renderEventTimeline();
+    }
   } else if (message.type === 'NETWORK_REQUEST') {
     networkRequests.push(message.data);
     if (currentTab === 'network') {
       renderNetworkRequests();
+    } else if (currentTab === 'consent') {
+      // If we receive a network request with consent signals while on the consent tab, auto-refresh
+      if (message.data.url.includes('gcs=') || message.data.url.includes('gcd=')) {
+        loadConsentState();
+      }
     }
   } else if (message.type === 'GA4_SESSION_UPDATE') {
     updateSessionDeepDive(message.data);
@@ -925,6 +1886,9 @@ chrome.runtime.onMessage.addListener((message) => {
     }
     const { selector, tagName, id, classes, attributes, innerText } = message.payload;
     if (!selector) return;
+
+    // Verify element matches current tab context 
+    // (Optional: Implement request ID check if strictly needed, but selector result is usually immediate)
 
     // UI Updates
     if (elements.selectorResult) {
@@ -979,15 +1943,15 @@ chrome.runtime.onMessage.addListener((message) => {
     });
 
     triggerHtml += suggestions.map(s => `
-      <div style="background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:4px">
+      < div style = "background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:4px" >
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">
           <span style="font-weight:bold;color:var(--google-blue)">${s.type}</span>
           <span style="font-size:9px;color:var(--text-muted)">${s.desc}</span>
         </div>
         <div style="font-size:10px;margin-bottom:4px">Condition: <span style="color:var(--text-secondary)">${s.condition}</span></div>
         <div style="font-family:monospace;background:var(--bg-primary);padding:4px;border-radius:2px;word-break:break-all">${s.value}</div>
-      </div>
-    `).join('');
+      </div >
+      `).join('');
     triggerHtml += '</div>';
 
     if (elements.triggerSuggestions) {
@@ -1000,16 +1964,16 @@ chrome.runtime.onMessage.addListener((message) => {
     const escapedSelector = selector.replace(/'/g, "\\'");
 
     const gtmCode = `function() {
-  var el = document.querySelector('${escapedSelector}');
-  return el ? ${getter} : undefined;
-}`;
+      var el = document.querySelector('${escapedSelector}');
+      return el ? ${getter} : undefined;
+    } `;
 
-    const testCode = `(function() {
-  var el = document.querySelector('${escapedSelector}');
-  var val = el ? ${getter} : undefined;
-  console.log('GTM Variable Value:', val);
-  return val;
-})();`;
+    const testCode = `(function () {
+      var el = document.querySelector('${escapedSelector}');
+      var val = el ? ${getter}: undefined;
+      console.log('GTM Variable Value:', val);
+      return val;
+    })(); `;
 
     if (elements.pickedJsVar) elements.pickedJsVar.textContent = gtmCode;
     if (elements.pickedJsTest) elements.pickedJsTest.textContent = testCode;
@@ -1106,51 +2070,714 @@ function resetSessionDeepDive() {
 // ============================================
 // Export Functions
 // ============================================
-elements.exportJson.addEventListener('click', () => {
-  const data = {
-    events,
-    networkRequests,
-    timestamp: new Date().toISOString(),
-    url: elements.currentUrl.textContent
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `swiss-knife-export-${Date.now()}.json`;
+  a.download = filename;
   a.click();
-  showToast('JSON Exported');
+  URL.revokeObjectURL(url);
+}
+
+elements.exportJson.addEventListener('click', () => {
+  const data = {
+    exportedAt: new Date().toISOString(),
+    url: elements.currentUrl.textContent,
+    events: events.map(e => ({
+      ...e,
+      validation: validateGA4Event(e.data || e)
+    })),
+    networkRequests,
+    summary: {
+      totalEvents: events.length,
+      totalRequests: networkRequests.length,
+      ga4Requests: networkRequests.filter(r => r.type?.includes('GA4')).length,
+      serverSideRequests: networkRequests.filter(r => r.isServerSide).length
+    }
+  };
+  downloadFile(JSON.stringify(data, null, 2), `swiss - knife -export -${Date.now()}.json`, 'application/json');
+  showToast('JSON Exported with validation data');
 });
 
 elements.exportCsv.addEventListener('click', () => {
   if (events.length === 0) return showToast('No events to export', 'error');
 
-  const headers = ['Timestamp', 'Event', 'Data'];
-  const rows = events.map(e => [
-    formatTimestamp(e.timestamp),
-    e.event || e.data?.event || 'push',
-    JSON.stringify(e.data).replace(/"/g, '""')
-  ]);
+  const headers = ['Timestamp', 'Event', 'Validation Score', 'Errors', 'Warnings', 'Data'];
+  const rows = events.map(e => {
+    const validation = validateGA4Event(e.data || e);
+    return [
+      formatTimestamp(e.timestamp),
+      e.event || e.data?.event || 'push',
+      validation.score,
+      validation.errors.join('; '),
+      validation.warnings.join('; '),
+      JSON.stringify(e.data).replace(/"/g, '""')
+    ];
+  });
 
   const csvContent = [
     headers.join(','),
     ...rows.map(r => r.map(v => `"${v}"`).join(','))
   ].join('\n');
 
-  const blob = new Blob([csvContent], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `swiss-knife-events-${Date.now()}.csv`;
-  a.click();
-  showToast('CSV Exported');
+  downloadFile(csvContent, `swiss - knife - events - ${Date.now()}.csv`, 'text/csv');
+  showToast('CSV Exported with validation');
 });
 
-// Listen for tab switching
-chrome.tabs.onActivated.addListener(() => {
-  getCurrentTab();
-  checkActiveInjection();
+// Export as HAR (HTTP Archive) format for network debugging
+function exportAsHAR() {
+  if (networkRequests.length === 0) {
+    showToast('No network requests to export', 'error');
+    return;
+  }
+
+  const har = {
+    log: {
+      version: '1.2',
+      creator: {
+        name: 'Swiss Knife for Google',
+        version: '1.2.0'
+      },
+      browser: {
+        name: navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser',
+        version: navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'Unknown'
+      },
+      pages: [{
+        startedDateTime: new Date(networkRequests[0]?.timestamp || Date.now()).toISOString(),
+        id: 'page_1',
+        title: elements.currentUrl.textContent || 'Unknown Page',
+        pageTimings: {}
+      }],
+      entries: networkRequests.map(req => {
+        let urlObj;
+        try { urlObj = new URL(req.url); } catch { urlObj = { pathname: req.url, searchParams: new URLSearchParams() }; }
+
+        const queryParams = [];
+        urlObj.searchParams?.forEach((value, name) => {
+          queryParams.push({ name, value });
+        });
+
+        return {
+          startedDateTime: new Date(req.timestamp).toISOString(),
+          time: req.timing?.duration || 0,
+          request: {
+            method: req.method || 'GET',
+            url: req.url,
+            httpVersion: 'HTTP/1.1',
+            headers: [],
+            queryString: queryParams,
+            cookies: [],
+            headersSize: -1,
+            bodySize: -1
+          },
+          response: {
+            status: req.statusCode || 0,
+            statusText: req.statusCode === 200 ? 'OK' : (req.error || ''),
+            httpVersion: 'HTTP/1.1',
+            headers: [],
+            cookies: [],
+            content: { size: 0, mimeType: 'text/html' },
+            redirectURL: '',
+            headersSize: -1,
+            bodySize: -1
+          },
+          cache: {},
+          timings: {
+            send: 0,
+            wait: req.timing?.duration || 0,
+            receive: 0
+          },
+          _swissKnife: {
+            type: req.type,
+            typeName: req.typeName,
+            isServerSide: req.isServerSide,
+            hasEnhancedConversions: req.hasEnhancedConversions
+          }
+        };
+      })
+    }
+  };
+
+  downloadFile(JSON.stringify(har, null, 2), `swiss - knife - network - ${Date.now()}.har`, 'application/json');
+  showToast('HAR file exported - import in Chrome DevTools');
+}
+
+// ============================================
+// Keyboard Shortcuts
+// ============================================
+const KEYBOARD_SHORTCUTS = {
+  'Ctrl+1': () => switchToTab('gtm'),
+  'Ctrl+2': () => switchToTab('monitor'),
+  'Ctrl+3': () => switchToTab('network'),
+  'Ctrl+4': () => switchToTab('audit'),
+  'Ctrl+5': () => switchToTab('cookies'),
+  'Ctrl+6': () => switchToTab('consent'),
+  'Ctrl+7': () => switchToTab('push'),
+  'Ctrl+K': () => focusCurrentFilter(),
+  'Ctrl+L': () => clearCurrentView(),
+  'Ctrl+E': () => elements.exportJson?.click(),
+  'Ctrl+Shift+E': () => exportAsHAR(),
+  'Ctrl+D': () => elements.themeToggle?.click(),
+  'Ctrl+R': () => refreshCurrentPanel(),
+  'Escape': () => closeModals()
+};
+
+function switchToTab(tabName) {
+  const tab = Array.from(elements.tabs).find(t => t.dataset.tab === tabName);
+  if (tab) tab.click();
+}
+
+function focusCurrentFilter() {
+  if (currentTab === 'monitor' && elements.eventFilter) {
+    elements.eventFilter.focus();
+  } else if (currentTab === 'network' && elements.networkFilter) {
+    elements.networkFilter.focus();
+  }
+}
+
+function clearCurrentView() {
+  if (currentTab === 'monitor') {
+    elements.clearEvents?.click();
+  } else if (currentTab === 'network') {
+    elements.clearNetwork?.click();
+  }
+}
+
+function refreshCurrentPanel() {
+  if (currentTab === 'gtm') {
+    detectContainers();
+  } else if (currentTab === 'cookies') {
+    refreshCookies();
+  } else if (currentTab === 'consent') {
+    loadConsentState();
+  } else if (currentTab === 'audit') {
+    runAudit();
+  }
+}
+
+function closeModals() {
+  // Close welcome overlay if open
+  if (elements.welcomeOverlay && elements.welcomeOverlay.style.display !== 'none') {
+    elements.getStartedBtn?.click();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  // Build shortcut key string
+  let key = '';
+  if (e.ctrlKey || e.metaKey) key += 'Ctrl+';
+  if (e.shiftKey) key += 'Shift+';
+  if (e.altKey) key += 'Alt+';
+
+  // Add the actual key
+  if (e.key === 'Escape') {
+    key = 'Escape';
+  } else if (e.key.length === 1) {
+    key += e.key.toUpperCase();
+  } else {
+    key += e.key;
+  }
+
+  const action = KEYBOARD_SHORTCUTS[key];
+  if (action) {
+    e.preventDefault();
+    action();
+  }
+});
+
+// ============================================
+// Event Timeline
+// ============================================
+function renderEventTimeline() {
+  if (!elements.eventTimeline || events.length === 0) return;
+
+  // Group events by type and show on timeline
+  const eventColors = {
+    page_view: '#4285F4',      // Blue
+    purchase: '#34A853',       // Green
+    add_to_cart: '#FBBC04',    // Yellow
+    begin_checkout: '#EA4335', // Red
+    view_item: '#9C27B0',      // Purple
+    view_item_list: '#00BCD4', // Cyan
+    login: '#FF5722',          // Orange
+    sign_up: '#8BC34A',        // Light Green
+    default: '#9E9E9E'         // Grey
+  };
+
+  const firstTimestamp = events[0]?.timestamp || Date.now();
+  const lastTimestamp = events[events.length - 1]?.timestamp || Date.now();
+  const timeRange = Math.max(lastTimestamp - firstTimestamp, 1000); // Min 1 second
+
+  const timelineHtml = `
+      < div style = "position:relative;height:60px;background:var(--bg-secondary);border-radius:8px;padding:8px 12px;min-width:${Math.max(300, events.length * 40)}px" >
+      < !--Timeline axis-- >
+      <div style="position:absolute;bottom:20px;left:12px;right:12px;height:2px;background:var(--border)"></div>
+
+      <!--Time markers-- >
+      <div style="position:absolute;bottom:8px;left:12px;font-size:9px;color:var(--text-muted)">${formatTimestamp(firstTimestamp)}</div>
+      <div style="position:absolute;bottom:8px;right:12px;font-size:9px;color:var(--text-muted)">${formatTimestamp(lastTimestamp)}</div>
+
+      <!--Event markers-- >
+      ${events.slice(-30).map((event, idx) => {
+    const data = event.data?.data || event.data || event;
+    const eventName = data?.event || 'push';
+    const color = eventColors[eventName] || eventColors.default;
+    const position = ((event.timestamp - firstTimestamp) / timeRange) * 100;
+    const validation = validateGA4Event(data);
+    const hasError = validation.errors.length > 0;
+
+    return `
+          <div class="timeline-marker"
+               style="position:absolute;bottom:16px;left:calc(12px + ${Math.min(position, 95)}%);transform:translateX(-50%);cursor:pointer"
+               title="${eventName} @ ${formatTimestamp(event.timestamp)}${hasError ? ' (has errors)' : ''}"
+               data-event-id="${event.id}">
+            <div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid ${hasError ? 'var(--error-red)' : 'var(--bg-primary)'};box-shadow:0 2px 4px rgba(0,0,0,0.2)"></div>
+            <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--text-secondary);white-space:nowrap;max-width:60px;overflow:hidden;text-overflow:ellipsis">${eventName}</div>
+          </div>
+        `;
+  }).join('')
+    }
+    </div >
+
+    < !--Legend-->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:9px">
+        ${Object.entries(eventColors).filter(([k]) => k !== 'default').slice(0, 6).map(([name, color]) => `
+        <div style="display:flex;align-items:center;gap:4px">
+          <div style="width:8px;height:8px;border-radius:50%;background:${color}"></div>
+          <span style="color:var(--text-muted)">${name}</span>
+        </div>
+      `).join('')}
+      </div>
+    `;
+
+  elements.eventTimeline.innerHTML = timelineHtml;
+
+  // Add click handlers for timeline markers
+  elements.eventTimeline.querySelectorAll('.timeline-marker').forEach(marker => {
+    marker.addEventListener('click', () => {
+      const eventId = marker.dataset.eventId;
+      const eventEl = document.querySelector(`.event - item[data - id="${eventId}"]`);
+      if (eventEl) {
+        eventEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        eventEl.style.boxShadow = '0 0 0 2px var(--accent-blue)';
+        setTimeout(() => eventEl.style.boxShadow = '', 2000);
+      }
+    });
+  });
+}
+
+// Timeline toggle handlers
+if (elements.showTimeline) {
+  elements.showTimeline.addEventListener('click', () => {
+    if (elements.timelineSection) {
+      elements.timelineSection.style.display = 'block';
+      renderEventTimeline();
+    }
+  });
+}
+
+if (elements.toggleTimeline) {
+  elements.toggleTimeline.addEventListener('click', () => {
+    if (elements.timelineSection) {
+      elements.timelineSection.style.display = 'none';
+    }
+  });
+}
+
+// HAR Export button handler
+if (elements.exportHar) {
+  elements.exportHar.addEventListener('click', exportAsHAR);
+}
+
+// ============================================
+// Saved Filters
+// ============================================
+const DEFAULT_FILTERS = [
+  { id: 'ecommerce', name: 'Ecommerce', pattern: 'view_item|view_item_list|select_item|add_to_cart|remove_from_cart|view_cart|begin_checkout|add_payment_info|add_shipping_info|purchase|refund', icon: '🛒' },
+  { id: 'errors', name: 'Errors Only', pattern: '__filter_errors__', icon: '❌' },
+  { id: 'ga4', name: 'GA4 Events', pattern: 'page_view|scroll|click|user_engagement|session_start|first_visit', icon: '📊' },
+  { id: 'user', name: 'User Actions', pattern: 'login|sign_up|generate_lead|search|share', icon: '👤' }
+];
+
+let savedFilters = [...DEFAULT_FILTERS];
+let activeFilter = null;
+
+async function loadSavedFilters() {
+  const stored = await chrome.storage.local.get('saved_filters');
+  if (stored.saved_filters) {
+    savedFilters = [...DEFAULT_FILTERS, ...stored.saved_filters];
+  }
+}
+
+function renderFilterChips() {
+  const container = document.getElementById('filterChips');
+  if (!container) return;
+
+  container.innerHTML = savedFilters.map(f => `
+    <button class="filter-chip ${activeFilter === f.id ? 'active' : ''}" 
+            data-filter-id="${f.id}" 
+            title="${f.pattern}"
+            style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 500; transition: all 0.2s; border: 1px solid ${activeFilter === f.id ? 'var(--accent-blue)' : 'var(--border)'}; background: ${activeFilter === f.id ? 'rgba(66, 133, 244, 0.1)' : 'var(--bg-secondary)'}; color: ${activeFilter === f.id ? 'var(--accent-blue)' : 'var(--text-primary)'}; cursor: pointer;">
+      <span style="font-size: 14px;">${f.icon || '🔍'}</span>
+      <span>${f.name}</span>
+    </button>
+  `).join('') + `
+    <button class="filter-chip add-filter" id="addFilterBtn" title="Save current filter"
+            style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; border: 1px dashed var(--border); background: var(--bg-secondary); color: var(--text-muted); cursor: pointer; font-size: 16px; transition: all 0.2s;">
+      <span>+</span>
+    </button>
+  `;
+
+  // Handle filter clicks
+  container.querySelectorAll('.filter-chip:not(.add-filter)').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const filterId = chip.dataset.filterId;
+      const filter = savedFilters.find(f => f.id === filterId);
+
+      if (activeFilter === filterId) {
+        // Deactivate
+        activeFilter = null;
+        elements.eventFilter.value = '';
+      } else {
+        activeFilter = filterId;
+        if (filter.pattern === '__filter_errors__') {
+          // Special filter for errors
+          filterEventsByErrors();
+          return;
+        }
+        elements.eventFilter.value = filter.pattern;
+      }
+      renderEvents();
+      renderFilterChips();
+    });
+  });
+
+  // Add filter button interaction
+  const addBtn = document.getElementById('addFilterBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const currentPattern = elements.eventFilter.value.trim();
+      if (!currentPattern) {
+        showToast('Type a search filter first to save', 'info');
+        elements.eventFilter.focus();
+        return;
+      }
+
+      // Create inline form
+      const wrapper = document.createElement('div');
+      wrapper.className = 'filter-form';
+      wrapper.style.display = 'inline-flex';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.gap = '4px';
+      wrapper.style.verticalAlign = 'middle';
+
+      wrapper.innerHTML = `
+        <input type="text" id="newFilterName" placeholder="Name" style="
+          padding: 5px 10px;
+          border-radius: 16px;
+          border: 1px solid var(--accent-blue);
+          font-size: 11px;
+          width: 90px;
+          outline: none;
+          background: var(--bg-surface);
+          color: var(--text-primary);
+        ">
+        <button id="saveFilter" title="Save" style="
+          background: var(--success-green);
+          color: white;
+          border: none;
+          border-radius: 50%;
+          width: 20px;
+          height: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        ">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:10px;height:10px"><polyline points="20 6 9 17 4 12" /></svg>
+        </button>
+        <button id="cancelFilter" title="Cancel" style="
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+          border: none;
+          border-radius: 50%;
+          width: 20px;
+          height: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        ">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:10px;height:10px"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    `;
+
+      addBtn.replaceWith(wrapper);
+      const input = wrapper.querySelector('input');
+      input.focus();
+
+      // Handlers
+      const saveLinks = async () => {
+        const name = input.value.trim();
+        if (!name) return;
+
+        const newFilter = {
+          id: 'custom_' + Date.now(),
+          name: name,
+          pattern: currentPattern,
+          icon: '⭐',
+          isCustom: true
+        };
+
+        const stored = await chrome.storage.local.get('saved_filters');
+        const customFilters = stored.saved_filters || [];
+        customFilters.push(newFilter);
+        await chrome.storage.local.set({ saved_filters: customFilters });
+
+        savedFilters.push(newFilter);
+        renderFilterChips();
+        showToast('Filter saved!');
+      };
+
+      const cancel = () => renderFilterChips();
+
+      wrapper.querySelector('#saveFilter').addEventListener('click', saveLinks);
+      wrapper.querySelector('#cancelFilter').addEventListener('click', cancel);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveLinks();
+        if (e.key === 'Escape') cancel();
+      });
+    });
+  }
+}
+
+function filterEventsByErrors() {
+  // Filter to show only events with validation errors
+  const eventsWithErrors = events.filter(e => {
+    const validation = validateGA4Event(e.data || e);
+    return validation.errors.length > 0;
+  });
+
+  if (eventsWithErrors.length === 0) {
+    showToast('No events with errors found', 'info');
+    activeFilter = null;
+    renderFilterChips();
+    return;
+  }
+
+  // Temporarily replace events for rendering
+  const originalEvents = [...events];
+  events.length = 0;
+  events.push(...eventsWithErrors);
+  renderEvents();
+  events.length = 0;
+  events.push(...originalEvents);
+}
+
+// ============================================
+// Real-time Alerts
+// ============================================
+let alertRules = [];
+let alertsEnabled = true;
+
+const DEFAULT_ALERT_RULES = [
+  {
+    id: 'missing_transaction_id',
+    name: 'Purchase without transaction_id',
+    condition: (event) => {
+      const data = event.data?.data || event.data || event;
+      return data.event === 'purchase' && !data.ecommerce?.transaction_id && !data.transaction_id;
+    },
+    severity: 'error'
+  },
+  {
+    id: 'empty_items',
+    name: 'Ecommerce event with empty items',
+    condition: (event) => {
+      const data = event.data?.data || event.data || event;
+      const ecEvents = ['purchase', 'add_to_cart', 'begin_checkout', 'view_item'];
+      if (!ecEvents.includes(data.event)) return false;
+      const items = data.ecommerce?.items || data.items;
+      return !items || items.length === 0;
+    },
+    severity: 'warning'
+  },
+  {
+    id: 'missing_currency',
+    name: 'Value without currency',
+    condition: (event) => {
+      const data = event.data?.data || event.data || event;
+      const value = data.ecommerce?.value ?? data.value;
+      const currency = data.ecommerce?.currency ?? data.currency;
+      return value !== undefined && !currency;
+    },
+    severity: 'warning'
+  }
+];
+
+function checkAlertRules(event) {
+  if (!alertsEnabled) return;
+
+  const rules = alertRules.length > 0 ? alertRules : DEFAULT_ALERT_RULES;
+
+  rules.forEach(rule => {
+    try {
+      if (rule.condition(event)) {
+        showAlert(rule);
+      }
+    } catch (e) {
+      console.error('Alert rule error:', e);
+    }
+  });
+}
+
+function showAlert(rule) {
+  const alertHtml = `
+      < div class="realtime-alert ${rule.severity}" style = "
+    position: fixed;
+    top: 60px;
+    right: 10px;
+    max - width: 280px;
+    padding: 12px 16px;
+    background:${rule.severity === 'error' ? 'var(--error-red)' : 'var(--warning-yellow)'};
+    color:${rule.severity === 'error' ? 'white' : 'black'};
+    border - radius: 8px;
+    box - shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z - index: 10000;
+    animation:slideIn 0.3s ease;
+    ">
+      < div style = "display:flex;align-items:center;gap:8px;margin-bottom:4px" >
+        <span style="font-size:14px">${rule.severity === 'error' ? '🚨' : '⚠️'}</span>
+        <strong style="font-size:12px">Alert</strong>
+      </div >
+      <div style="font-size:11px">${rule.name}</div>
+    </div >
+      `;
+
+  const alertEl = document.createElement('div');
+  alertEl.innerHTML = alertHtml;
+  document.body.appendChild(alertEl.firstElementChild);
+
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    const alert = document.querySelector('.realtime-alert');
+    if (alert) {
+      alert.style.opacity = '0';
+      alert.style.transition = 'opacity 0.3s';
+      setTimeout(() => alert.remove(), 300);
+    }
+  }, 5000);
+}
+
+// Inject alert animation CSS
+const alertStyles = document.createElement('style');
+alertStyles.textContent = `
+    @keyframes slideIn {
+    from { transform: translateX(100 %); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+    }
+  .filter - chip {
+      display: inline - flex;
+      align - items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      font - size: 11px;
+      font - weight: 500;
+      color: var(--text - primary);
+      background: var(--bg - surface);
+      border: 1px solid var(--border);
+      border - radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s cubic - bezier(0.4, 0, 0.2, 1);
+      user - select: none;
+      box - shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+  .filter - chip:hover {
+      background: var(--bg - hover);
+      border - color: var(--text - secondary);
+      transform: translateY(-1px);
+      box - shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+    }
+  .filter - chip.active {
+      background: var(--accent - blue);
+      color: white;
+      border - color: var(--accent - blue);
+      box - shadow: 0 2px 4px rgba(66, 133, 244, 0.3);
+    }
+  .filter - chip.add - filter {
+      padding: 6px 10px;
+      border - style: dashed;
+      color: var(--text - secondary);
+      background: transparent;
+    }
+  .filter - chip.add - filter:hover {
+      color: var(--accent - blue);
+      border - color: var(--accent - blue);
+      background: rgba(66, 133, 244, 0.05);
+    }
+    `;
+document.head.appendChild(alertStyles);
+
+// ============================================
+// Tab Handling
+// ============================================
+async function handleTabChange(tabId) {
+  console.log('[Swiss Knife] Tab Changed:', tabId);
+
+  // 1. Clear Local State
+  events = [];
+  networkRequests = [];
+  techCache = null;
+  expandedNetworkItems.clear();
+
+  // 2. Reset UI to Empty States
+  renderEvents();
+  renderNetworkRequests();
+  if (elements.techResults) elements.techResults.innerHTML = '';
+  if (elements.containerList) elements.containerList.innerHTML = '';
+  if (elements.auditResults) elements.auditResults.innerHTML = '<div class="empty-state"><p>Click Scan to start</p></div>';
+
+  // 3. Get Tab Details
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch (e) { return; }
+
+  if (!tab || !tab.url) return;
+
+  // 4. Update Context & Fetch Data
+  updateCurrentUrl(tab.url);
+  resetSessionDeepDive();
+
+  // Trigger detections
   detectContainers();
+  checkActiveInjection();
+  loadConsentState();
+  loadSessionInfo();
+  checkBlockGA4State();
+
+  // Fetch active tab data
+  setTimeout(() => {
+    loadEvents();
+    loadNetworkRequests();
+  }, 100);
+
+  // Panel specific refreshes
+  if (currentTab === 'cookies') refreshCookies();
+  if (currentTab === 'tech') detectTechnologies();
+}
+
+// Listen for tab switching
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  handleTabChange(activeInfo.tabId);
+});
+
+// Listen for URL updates in the same tab
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.active) {
+    handleTabChange(tabId);
+  }
 });
 
 // ============================================
@@ -1194,34 +2821,7 @@ async function loadConsentState() {
   }
 }
 
-function renderConsentState() {
-  const list = document.getElementById('consentList');
-  if (!list) return;
 
-  if (!consentState) {
-    list.innerHTML = '<div class="empty-state"><p>No consent data</p></div>';
-    return;
-  }
-
-  const mapColor = (status) => {
-    if (status === 'granted') return 'var(--success-green)';
-    if (status === 'denied') return 'var(--error-red)';
-    return 'var(--text-muted)';
-  };
-
-  list.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            ${Object.keys(consentState).map(key => `
-                <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:4px">
-                    <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase">${key.replace(/_/g, ' ')}</div>
-                    <div style="font-size:12px;font-weight:600;color:${mapColor(consentState[key])}">
-                        ${consentState[key].toUpperCase()}
-                    </div>
-                </div>
-            `).join('')}
-        </div>
-    `;
-}
 
 // ============================================
 // Tools Section (Blocker & Cleaner)
@@ -1299,16 +2899,16 @@ async function runAudit() {
     if (perf) {
       const perfColor = perf.impactScore === 'High' ? 'var(--error-red)' : (perf.impactScore === 'Medium' ? 'var(--warning-yellow)' : 'var(--success-green)');
       elements.auditResults.innerHTML = `
-        <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:8px;border-left:4px solid ${perfColor}">
+      < div class="container-item" style = "flex-direction:column;align-items:flex-start;gap:8px;border-left:4px solid ${perfColor}" >
           <div style="font-size:11px;font-weight:bold;color:var(--text-primary)">Tracking Performance Impact: ${perf.impactScore}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;font-size:10px">
             <div>Scripts: <span style="font-weight:600">${perf.containerCount}</span></div>
             <div>Overhead: <span style="font-weight:600">${perf.sizeKb} KB</span></div>
             <div>Load Time: <span style="font-weight:600">${perf.loadTimeMs} ms</span></div>
           </div>
-        </div>
-        <div style="margin:12px 0;height:1px;background:var(--border)"></div>
-      `;
+        </div >
+      <div style="margin:12px 0;height:1px;background:var(--border)"></div>
+    `;
     }
   } catch (e) { console.error('Perf check failed', e); }
 
@@ -1318,14 +2918,26 @@ async function runAudit() {
   const containers = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.GTM_DETECT });
   const gtmCount = (containers || []).filter(c => c.type === 'GTM').length;
   if (gtmCount > 1) {
-    checks.push({ status: 'warning', title: 'Multiple GTM Containers', desc: `Found ${gtmCount} containers. This might cause data discrepancies.` });
+    checks.push({ status: 'warning', title: 'Multiple GTM Containers', desc: `Found ${gtmCount} containers.This might cause data discrepancies.` });
   } else if (gtmCount === 1) {
     checks.push({ status: 'success', title: 'GTM Found', desc: 'Single GTM container detected correctly.' });
   } else {
     checks.push({ status: 'error', title: 'GTM Missing', desc: 'No GTM container detected on this page.' });
   }
 
-  // 2. Conversion Linker Check
+  // 2. Google Tag (gtag.js) Check
+  const ga4Count = (containers || []).filter(c => c.type === 'GA4').length;
+  const hasGtagScript = networkRequests.some(r => r.url && r.url.includes('googletagmanager.com/gtag/js'));
+  if (ga4Count > 1) {
+    checks.push({ status: 'warning', title: 'Multiple Google Tags', desc: `Found ${ga4Count} Google Tag(gtag.js) instances.Consider consolidating.` });
+  } else if (ga4Count === 1 || hasGtagScript) {
+    const ga4Id = (containers || []).find(c => c.type === 'GA4')?.id || '';
+    checks.push({ status: 'success', title: 'Google Tag Found', desc: `Google Tag(gtag.js) installed${ga4Id ? ` - ${ga4Id}` : ''}.` });
+  } else if (gtmCount === 0) {
+    checks.push({ status: 'error', title: 'Google Tag Missing', desc: 'No Google Tag (gtag.js) detected. GA4 may not be collecting data.' });
+  }
+
+  // 3. Conversion Linker Check
   const cookies = await chrome.runtime.sendMessage({ type: 'COOKIES_GET' });
   const hasLinker = (cookies || []).some(c => c.name === '_gcl_au');
   if (hasLinker) {
@@ -1397,24 +3009,36 @@ async function refreshCookies() {
   elements.refreshCookies.querySelector('svg').classList.remove('spin-animation');
 }
 
-function renderCookies(cookies) {
+async function renderCookies(cookies) {
   if (cookies.length === 0) {
     elements.cookieList.innerHTML = '<div class="empty-state"><p>No tracking cookies found</p></div>';
     return;
   }
 
-  elements.cookieList.innerHTML = cookies.map(c => `
-    <div class="container-item">
-      <div style="flex:1;overflow:hidden">
-        <div style="font-weight:600;font-size:12px;color:var(--accent-blue)">${c.name}</div>
-        <div style="font-size:11px;color:var(--text-muted);text-overflow:ellipsis;overflow:hidden;white-space:nowrap" title="${c.value}">${c.value}</div>
-        <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">Expires: ${c.expirationDate ? new Date(c.expirationDate * 1000).toLocaleDateString() : 'Session'}</div>
+  // Get test cookie value to identify dummy cookies
+  const testGclAwValue = await (async () => {
+    const stored = await chrome.storage.local.get('testGclAwValue');
+    return stored.testGclAwValue || null;
+  })();
+
+  elements.cookieList.innerHTML = cookies.map(c => {
+    const isDummyCookie = c.name === '_gcl_aw' && testGclAwValue && c.value === testGclAwValue;
+    const dummyBadge = isDummyCookie
+      ? '<span style="margin-left:6px;padding:2px 6px;background:var(--warning-yellow);color:#000;font-size:9px;font-weight:700;border-radius:3px;text-transform:uppercase">Dummy</span>'
+      : '';
+
+    return `
+      <div class="container-item">
+        <div style="flex:1;overflow:hidden">
+          <div style="font-weight:600;font-size:12px;color:var(--accent-blue);display:flex;align-items:center">${c.name}${dummyBadge}</div>
+          <div style="font-size:11px;color:var(--text-muted);text-overflow:ellipsis;overflow:hidden;white-space:nowrap" title="${c.value}">${c.value}</div>
+          <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">Expires: ${c.expirationDate ? new Date(c.expirationDate * 1000).toLocaleDateString() : 'Session'}</div>
+        </div>
+        <button class="btn-icon btn-small delete-cookie" data-name="${c.name}" title="Delete Cookie">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
       </div>
-      <button class="btn-icon btn-small delete-cookie" data-name="${c.name}" title="Delete Cookie">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-      </button>
-    </div>
-  `).join('');
+    `}).join('');
 
   elements.cookieList.querySelectorAll('.delete-cookie').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -1428,14 +3052,97 @@ function renderCookies(cookies) {
 
 if (elements.refreshCookies) elements.refreshCookies.addEventListener('click', refreshCookies);
 
+// Test _gcl_aw Cookie Functions
+const addTestGclAwBtn = document.getElementById('addTestGclAw');
+const deleteTestGclAwBtn = document.getElementById('deleteTestGclAw');
+
+// Track test cookie value in storage
+async function getTestGclAwValue() {
+  const stored = await chrome.storage.local.get('testGclAwValue');
+  return stored.testGclAwValue || null;
+}
+
+async function setTestGclAwValue(value) {
+  await chrome.storage.local.set({ testGclAwValue: value });
+}
+
+async function clearTestGclAwValue() {
+  await chrome.storage.local.remove('testGclAwValue');
+}
+
+if (addTestGclAwBtn) {
+  addTestGclAwBtn.addEventListener('click', async () => {
+    // Check if real _gcl_aw exists
+    const cookies = await chrome.runtime.sendMessage({ type: 'COOKIES_GET' });
+    const existingGclAw = (cookies || []).find(c => c.name === '_gcl_aw');
+    const testValue = await getTestGclAwValue();
+
+    if (existingGclAw && existingGclAw.value !== testValue) {
+      showToast('Real _gcl_aw already exists! Cannot overwrite.', 'warning');
+      return;
+    }
+
+    // Generate a test _gcl_aw value with clear test identifier
+    const timestamp = Math.floor(Date.now() / 1000);
+    const newTestValue = `GCL.${timestamp}.Tester123`;
+
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'COOKIES_SET',
+        name: '_gcl_aw',
+        value: newTestValue,
+        expirationDate: Math.floor(Date.now() / 1000) + 7776000 // 90 days
+      });
+      await setTestGclAwValue(newTestValue);
+      showToast('Test _gcl_aw cookie added', 'success');
+      refreshCookies();
+    } catch (e) {
+      showToast('Failed to add cookie: ' + e.message, 'error');
+    }
+  });
+}
+
+if (deleteTestGclAwBtn) {
+  deleteTestGclAwBtn.addEventListener('click', async () => {
+    const testValue = await getTestGclAwValue();
+    if (!testValue) {
+      showToast('No test cookie to delete', 'info');
+      return;
+    }
+
+    // Verify the current cookie is actually our test cookie
+    const cookies = await chrome.runtime.sendMessage({ type: 'COOKIES_GET' });
+    const currentGclAw = (cookies || []).find(c => c.name === '_gcl_aw');
+
+    if (!currentGclAw || currentGclAw.value !== testValue) {
+      await clearTestGclAwValue();
+      showToast('Test cookie no longer exists', 'info');
+      refreshCookies();
+      return;
+    }
+
+    try {
+      await chrome.runtime.sendMessage({ type: 'COOKIES_DELETE', name: '_gcl_aw' });
+      await clearTestGclAwValue();
+      showToast('Test _gcl_aw cookie deleted', 'success');
+      refreshCookies();
+    } catch (e) {
+      showToast('Failed to delete cookie: ' + e.message, 'error');
+    }
+  });
+}
+
 // ============================================
 // Professional Features: Snippets
 // ============================================
 const SNIPPETS = [
-  { id: 'dl_size', name: 'Check DataLayer Size', code: 'alert("DataLayer length: " + (window.dataLayer ? window.dataLayer.length : 0))' },
+  { id: 'dl_size', name: 'Check DataLayer Size', code: 'const dlLength = window.dataLayer ? window.dataLayer.length : 0; window.postMessage({ source: "SWISS_KNIFE_SNIPPET", type: "SHOW_TOAST", message: "DataLayer length: " + dlLength, level: "info" }, "*");' },
   { id: 'ec_check', name: 'Log eCommerce items', code: 'console.table(window.dataLayer.filter(e => e.ecommerce && e.ecommerce.items).map(e => e.ecommerce.items).flat())' },
   { id: 'clear_ga4', name: 'Clear GA4 SessionStorage', code: 'Object.keys(sessionStorage).filter(k => k.startsWith("_ga")).forEach(k => sessionStorage.removeItem(k)); alert("GA4 Session Storage Cleared")' },
-  { id: 'force_scroll', name: 'Inject 90% Scroll Hit', code: 'window.dataLayer.push({event: "scroll", percent_scrolled: 90});' }
+  { id: 'find_gtm', name: 'Find GTM Containers', code: 'const ids = Object.keys(window.google_tag_manager || {}).filter(k => k.startsWith("GTM-")); alert("GTM IDs found: " + (ids.join(", ") || "None"));' },
+  { id: 'get_ga4_ids', name: 'Get GA4 Client & Session IDs', code: 'const cid = (document.cookie.match(/_ga=([^;]+)/) || [])[1]; const sid = (document.cookie.match(/_ga_[^=]+=GS1\\.1\\.([^.]+)/) || [])[1]; alert("Client ID: " + (cid || "Not found") + "\\nSession ID: " + (sid || "Not found"));' },
+  { id: 'dl_search', name: 'Search DataLayer (Key)', code: 'const key = prompt("Enter key to search:"); if(key && window.dataLayer){ const results = window.dataLayer.filter(e => e[key] !== undefined); console.log("Search results for " + key + ":", results); alert("Found " + results.length + " events with key: " + key); }' },
+  { id: 'list_cookies', name: 'List All Marketing Cookies', code: 'const target = ["_ga", "_gid", "_gcl_aw", "_fbp", "_uetsid"]; const found = document.cookie.split(";").map(c => c.trim()).filter(c => target.some(t => c.startsWith(t))); console.log("Marketing Cookies:", found); alert("Found " + found.length + " marketing cookies. Check console for details.");' }
 ];
 
 async function renderSnippets() {
@@ -1484,7 +3191,7 @@ async function renderSnippets() {
             },
             args: [snippet.code]
           });
-          showToast(`Executing: ${snippet.name}`);
+          showToast(`Executing: ${snippet.name} `);
         }
       }
     });
@@ -1539,7 +3246,7 @@ if (elements.getStartedBtn) {
 // ============================================
 // Initialize
 // ============================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   checkWelcome();
   loadRecentIds();
@@ -1551,4 +3258,17 @@ document.addEventListener('DOMContentLoaded', () => {
   checkBlockGA4State();
   getCurrentTab();
   loadSessionInfo();
+  // Load saved filters and render chips
+  await loadSavedFilters();
+  renderFilterChips();
+});
+
+// ============================================
+// Listen for messages from snippets
+// ============================================
+window.addEventListener('message', (event) => {
+  // Only accept messages from our own extension's snippets
+  if (event.data && event.data.source === 'SWISS_KNIFE_SNIPPET' && event.data.type === 'SHOW_TOAST') {
+    showToast(event.data.message, event.data.level || 'info');
+  }
 });

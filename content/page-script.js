@@ -218,7 +218,18 @@
                 break;
 
             case 'GET_CONSENT_STATE':
-                reply('CONSENT_STATE', getConsentState());
+                try {
+                    const consentData = getConsentState();
+                    console.log('[Swiss Knife] Consent data retrieved:', consentData);
+                    reply('CONSENT_STATE', consentData);
+                } catch (error) {
+                    console.error('[Swiss Knife] Error getting consent state:', error);
+                    reply('CONSENT_STATE', { error: error.message });
+                }
+                break;
+
+            case 'DETECT_TECH':
+                reply('TECH_DETECTED', { technologies: detectTechnologies() });
                 break;
 
             case 'GET_PERFORMANCE_METRICS':
@@ -598,33 +609,108 @@
             security_storage: 'unknown'
         };
 
-        // 1. Try internal GTM data (most accurate)
-        if (window.google_tag_data?.ics?.entries) {
-            const entries = window.google_tag_data.ics.entries;
-            Object.keys(entries).forEach(key => {
-                if (state.hasOwnProperty(key)) {
-                    state[key] = entries[key].current === 'granted' ? 'granted' : 'denied';
+        let hasDefault = false;
+        let hasUpdate = false;
+        let waitForUpdate = false;
+
+        // 1. Try internal GTM data (most accurate for V2)
+        try {
+            if (window.google_tag_data?.ics?.entries) {
+                const entries = window.google_tag_data.ics.entries;
+                for (const key in entries) {
+                    if (state.hasOwnProperty(key)) {
+                        // entries[key] can be an object with 'current' or just the string status
+                        const val = entries[key];
+                        const status = (typeof val === 'object' && val.current) ? val.current : val;
+
+                        if (status === 'granted' || status === 'denied') {
+                            state[key] = status;
+                        }
+                    }
                 }
-            });
+
+                // Check if in wait_for_update mode
+                if (window.google_tag_data.ics.usedDefault) {
+                    hasDefault = true;
+                }
+                if (window.google_tag_data.ics.usedUpdate) {
+                    hasUpdate = true;
+                }
+                // If only default is set and no update, we're in blocking mode
+                waitForUpdate = hasDefault && !hasUpdate;
+            }
+        } catch (e) {
+            console.warn('[Swiss Knife] Error reading GTM consent:', e);
         }
 
-        // 2. Fallback to dataLayer scan
+        // 1.5. Check window.google_tag_manager internal structures
+        try {
+            if (window.google_tag_manager) {
+                Object.keys(window.google_tag_manager).forEach(key => {
+                    if (key.startsWith('GTM-')) {
+                        const container = window.google_tag_manager[key];
+                        // Some GTM versions store consent state differently
+                        if (container.consent && typeof container.consent === 'object') {
+                            Object.keys(container.consent).forEach(ckey => {
+                                if (state.hasOwnProperty(ckey) && state[ckey] === 'unknown') {
+                                    state[ckey] = container.consent[ckey] ? 'granted' : 'denied';
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+        } catch (e) { }
+
+        // 2. Fallback to dataLayer scan (Chronological Replay)
         const targetDlName = window.__swissKnife.dataLayerName || 'dataLayer';
         if (Array.isArray(window[targetDlName])) {
             window[targetDlName].forEach(item => {
-                if (item['0'] === 'consent' && (item['1'] === 'default' || item['1'] === 'update')) {
-                    const status = item['2'] || {};
+                // Check standard arguments object (arguments[0] === 'consent') or pushed object
+                let command, type, status;
+
+                if (item && item['0'] === 'consent') {
+                    // Gtag style: gtag('consent', 'default'|'update', {...})
+                    type = item['1'];
+                    status = item['2'];
+                } else if (item && item.event === 'consent_default' || item.event === 'consent_update') {
+                    // Custom event style
+                    type = item.event.replace('consent_', '');
+                    status = item;
+                }
+
+                if (status && type === 'default') {
+                    hasDefault = true;
                     Object.keys(status).forEach(key => {
                         if (state.hasOwnProperty(key)) {
-                            // Only update if not already set by GTM API or if it's an 'update'
-                            if (state[key] === 'unknown' || item['1'] === 'update') {
-                                state[key] = status[key];
-                            }
+                            state[key] = status[key];
+                        }
+                        // Check for wait_for_update flag
+                        if (key === 'wait_for_update' && status[key]) {
+                            waitForUpdate = true;
+                        }
+                    });
+                }
+
+                if (status && type === 'update') {
+                    hasUpdate = true;
+                    Object.keys(status).forEach(key => {
+                        if (state.hasOwnProperty(key)) {
+                            state[key] = status[key];
                         }
                     });
                 }
             });
         }
+
+        // 3. Add metadata
+        state._metadata = {
+            hasDefault: hasDefault,
+            hasUpdate: hasUpdate,
+            waitForUpdate: waitForUpdate,
+            isBlocking: waitForUpdate || (hasDefault && !hasUpdate),
+            timestamp: Date.now()
+        };
 
         return state;
     }
@@ -751,6 +837,772 @@
             type: 'GTM_REMOVED',
             payload: { gtmId, success: true }
         }, '*');
+    }
+
+    // ============================================
+    // Technology Stack Detection
+    // ============================================
+    function detectTechnologies() {
+        const detected = [];
+        const scripts = Array.from(document.querySelectorAll('script[src]')).map(s => s.src.toLowerCase());
+        const allScripts = Array.from(document.querySelectorAll('script')).map(s => s.innerHTML || '');
+        const links = Array.from(document.querySelectorAll('link[href]')).map(l => l.href.toLowerCase());
+        const html = document.documentElement.outerHTML.substring(0, 50000).toLowerCase();
+
+        const TECH_SIGNATURES = {
+            // JavaScript Frameworks
+            'React': {
+                globals: ['React', '__REACT_DEVTOOLS_GLOBAL_HOOK__', '__REACT_ERROR_OVERLAY_GLOBAL_HOOK__'],
+                selector: '[data-reactroot], [data-reactid]',
+                category: 'JavaScript Framework',
+                icon: '⚛️',
+                getVersion: () => window.React?.version
+            },
+            'Vue.js': {
+                globals: ['Vue', '__VUE__', '__VUE_DEVTOOLS_GLOBAL_HOOK__'],
+                selector: '[data-v-], [v-cloak]',
+                category: 'JavaScript Framework',
+                icon: '💚',
+                getVersion: () => window.Vue?.version
+            },
+            'Angular': {
+                globals: ['ng', 'angular', 'getAllAngularRootElements'],
+                selector: '[ng-version], [ng-app], [_ngcontent], [_nghost]',
+                category: 'JavaScript Framework',
+                icon: '🅰️',
+                getVersion: () => document.querySelector('[ng-version]')?.getAttribute('ng-version')
+            },
+            'Next.js': {
+                globals: ['__NEXT_DATA__', '__NEXT_LOADED_PAGES__'],
+                selector: '#__next',
+                category: 'JavaScript Framework',
+                icon: '▲',
+                getVersion: () => window.__NEXT_DATA__?.nextExport ? 'SSG' : (window.__NEXT_DATA__ ? 'SSR' : null)
+            },
+            'Nuxt.js': {
+                globals: ['__NUXT__', '$nuxt', '__NUXT_PATHS__'],
+                category: 'JavaScript Framework',
+                icon: '💚'
+            },
+            'Gatsby': {
+                globals: ['___gatsby', '___GATSBY_INITIAL_RENDER_COMPLETE'],
+                selector: '#___gatsby',
+                category: 'JavaScript Framework',
+                icon: '💜'
+            },
+            'jQuery': {
+                globals: ['jQuery', 'jquery'],
+                category: 'JavaScript Library',
+                icon: '📜',
+                getVersion: () => window.jQuery?.fn?.jquery || window.jQuery?.prototype?.jquery
+            },
+            'Svelte': {
+                globals: ['__svelte', '__SVELTE_HMR'],
+                category: 'JavaScript Framework',
+                icon: '🔥'
+            },
+            'Alpine.js': {
+                globals: ['Alpine'],
+                selector: '[x-data], [x-bind], [x-on]',
+                category: 'JavaScript Framework',
+                icon: '🏔️',
+                getVersion: () => window.Alpine?.version
+            },
+            'Ember.js': {
+                globals: ['Ember', 'Em'],
+                selector: '.ember-view, .ember-application',
+                category: 'JavaScript Framework',
+                icon: '🐹',
+                getVersion: () => window.Ember?.VERSION
+            },
+            'Backbone.js': {
+                globals: ['Backbone'],
+                category: 'JavaScript Library',
+                icon: '🦴',
+                getVersion: () => window.Backbone?.VERSION
+            },
+            'Lodash': {
+                globals: ['_'],
+                category: 'JavaScript Library',
+                icon: '📚',
+                getVersion: () => window._?.VERSION
+            },
+            'Axios': {
+                globals: ['axios'],
+                category: 'JavaScript Library',
+                icon: '📡',
+                getVersion: () => window.axios?.VERSION
+            },
+            'Moment.js': {
+                globals: ['moment'],
+                category: 'JavaScript Library',
+                icon: '⏰',
+                getVersion: () => window.moment?.version
+            },
+            'GSAP': {
+                globals: ['gsap', 'TweenMax', 'TweenLite'],
+                category: 'JavaScript Library',
+                icon: '🎬',
+                getVersion: () => window.gsap?.version
+            },
+            'Three.js': {
+                globals: ['THREE'],
+                category: 'JavaScript Library',
+                icon: '🎮',
+                getVersion: () => window.THREE?.REVISION
+            },
+            'D3.js': {
+                globals: ['d3'],
+                category: 'JavaScript Library',
+                icon: '📊',
+                getVersion: () => window.d3?.version
+            },
+
+            // CMS
+            'WordPress': {
+                selector: 'link[href*="wp-content"], link[href*="wp-includes"], meta[name="generator"][content*="WordPress"]',
+                scripts: ['wp-content', 'wp-includes', 'wp-json'],
+                category: 'CMS',
+                icon: '📝'
+            },
+            'Drupal': {
+                globals: ['Drupal'],
+                selector: 'meta[name="generator"][content*="Drupal"]',
+                scripts: ['drupal.js'],
+                category: 'CMS',
+                icon: '💧',
+                getVersion: () => window.Drupal?.settings?.version
+            },
+            'Joomla': {
+                selector: 'meta[name="generator"][content*="Joomla"]',
+                scripts: ['joomla'],
+                category: 'CMS',
+                icon: '🟠'
+            },
+            'Shopify': {
+                globals: ['Shopify', 'ShopifyAnalytics'],
+                selector: 'link[href*="cdn.shopify.com"]',
+                scripts: ['cdn.shopify.com'],
+                category: 'E-commerce',
+                icon: '🛍️',
+                getVersion: () => window.Shopify?.theme?.name
+            },
+            'Webflow': {
+                globals: ['Webflow'],
+                selector: 'html[data-wf-site], .w-webflow-badge',
+                category: 'CMS',
+                icon: '🎨'
+            },
+            'Wix': {
+                scripts: ['static.wixstatic.com', 'static.parastorage.com'],
+                selector: 'meta[name="generator"][content*="Wix"]',
+                category: 'CMS',
+                icon: '🌐'
+            },
+            'Squarespace': {
+                globals: ['Static', 'Squarespace'],
+                selector: 'link[href*="squarespace"]',
+                category: 'CMS',
+                icon: '⬛'
+            },
+            'Ghost': {
+                selector: 'meta[name="generator"][content*="Ghost"]',
+                category: 'CMS',
+                icon: '👻'
+            },
+            'Contentful': {
+                globals: ['contentful'],
+                scripts: ['contentful'],
+                category: 'CMS',
+                icon: '📄'
+            },
+
+            // Analytics & Tag Management
+            'Google Tag Manager': {
+                globals: ['google_tag_manager', 'google_tag_data'],
+                scripts: ['googletagmanager.com/gtm.js', 'googletagmanager.com/gtm/js'],
+                category: 'Tag Management',
+                icon: '🏷️',
+                getDetails: () => {
+                    const ids = Object.keys(window.google_tag_manager || {}).filter(k => k.startsWith('GTM-'));
+                    return ids.length ? ids.join(', ') : null;
+                }
+            },
+            'Google Analytics 4': {
+                globals: ['gtag', 'google_tag_data'],
+                scripts: ['googletagmanager.com/gtag/js'],
+                category: 'Analytics',
+                icon: '📊',
+                getDetails: () => {
+                    const gtagMatch = html.match(/gtag\(['"]config['"],\s*['"](G-[A-Z0-9]+)['"]/);
+                    return gtagMatch ? gtagMatch[1] : null;
+                }
+            },
+            'Google Analytics (UA)': {
+                globals: ['ga', 'GoogleAnalyticsObject'],
+                scripts: ['google-analytics.com/analytics.js', 'google-analytics.com/ga.js'],
+                category: 'Analytics',
+                icon: '📈',
+                getDetails: () => {
+                    if (window.ga?.getAll) {
+                        const trackers = window.ga.getAll();
+                        return trackers.map(t => t.get('trackingId')).join(', ');
+                    }
+                    return null;
+                }
+            },
+            'Facebook Pixel': {
+                globals: ['fbq', '_fbq'],
+                scripts: ['connect.facebook.net/en_US/fbevents.js'],
+                category: 'Marketing',
+                icon: '📘',
+                getDetails: () => window.fbq?.getState?.()?.pixelIDs?.join(', ')
+            },
+            'Meta Pixel': {
+                globals: ['fbq'],
+                scripts: ['connect.facebook.net'],
+                category: 'Marketing',
+                icon: '📘'
+            },
+            'Hotjar': {
+                globals: ['hj', 'hjSiteSettings', '_hjSettings'],
+                scripts: ['static.hotjar.com'],
+                category: 'Analytics',
+                icon: '🔥',
+                getDetails: () => window._hjSettings?.hjid
+            },
+            'Mixpanel': {
+                globals: ['mixpanel'],
+                scripts: ['cdn.mxpnl.com', 'mixpanel.com'],
+                category: 'Analytics',
+                icon: '📊'
+            },
+            'Segment': {
+                globals: ['analytics'],
+                scripts: ['cdn.segment.com', 'segment.io'],
+                category: 'Analytics',
+                icon: '💚'
+            },
+            'Amplitude': {
+                globals: ['amplitude'],
+                scripts: ['cdn.amplitude.com'],
+                category: 'Analytics',
+                icon: '📈'
+            },
+            'Heap': {
+                globals: ['heap'],
+                scripts: ['heap-analytics.com', 'heapanalytics.com'],
+                category: 'Analytics',
+                icon: '📊'
+            },
+            'Clarity': {
+                globals: ['clarity'],
+                scripts: ['clarity.ms'],
+                category: 'Analytics',
+                icon: '🔍'
+            },
+            'FullStory': {
+                globals: ['FS', '_fs_host'],
+                scripts: ['fullstory.com'],
+                category: 'Analytics',
+                icon: '🎥'
+            },
+            'LogRocket': {
+                globals: ['LogRocket', '_lr_loaded'],
+                scripts: ['cdn.logrocket.io', 'logrocket.com'],
+                category: 'Analytics',
+                icon: '🚀'
+            },
+            'Pendo': {
+                globals: ['pendo'],
+                scripts: ['pendo.io', 'cdn.pendo.io'],
+                category: 'Analytics',
+                icon: '📍'
+            },
+            'Mouseflow': {
+                globals: ['mouseflow', '_mfq'],
+                scripts: ['mouseflow.com'],
+                category: 'Analytics',
+                icon: '🖱️'
+            },
+            'Lucky Orange': {
+                globals: ['__lo_site_id'],
+                scripts: ['luckyorange.com'],
+                category: 'Analytics',
+                icon: '🍊'
+            },
+            'Plausible': {
+                scripts: ['plausible.io'],
+                category: 'Analytics',
+                icon: '📊'
+            },
+            'Matomo': {
+                globals: ['_paq', 'Matomo', 'Piwik'],
+                scripts: ['matomo', 'piwik'],
+                category: 'Analytics',
+                icon: '📊'
+            },
+
+            // Advertising
+            'Google Ads': {
+                globals: ['google_trackConversion', 'gtag_report_conversion'],
+                scripts: ['googleadservices.com', 'googlesyndication.com/pagead'],
+                category: 'Advertising',
+                icon: '📢'
+            },
+            'Google AdSense': {
+                globals: ['adsbygoogle'],
+                scripts: ['pagead2.googlesyndication.com/pagead/js/adsbygoogle'],
+                selector: 'ins.adsbygoogle',
+                category: 'Advertising',
+                icon: '💰'
+            },
+            'LinkedIn Insight': {
+                globals: ['_linkedin_data_partner_ids', 'lintrk'],
+                scripts: ['snap.licdn.com'],
+                category: 'Marketing',
+                icon: '💼'
+            },
+            'Twitter Pixel': {
+                globals: ['twq'],
+                scripts: ['static.ads-twitter.com'],
+                category: 'Marketing',
+                icon: '🐦'
+            },
+            'TikTok Pixel': {
+                globals: ['ttq'],
+                scripts: ['analytics.tiktok.com'],
+                category: 'Marketing',
+                icon: '🎵'
+            },
+            'Pinterest Tag': {
+                globals: ['pintrk'],
+                scripts: ['s.pinimg.com/ct'],
+                category: 'Marketing',
+                icon: '📌'
+            },
+            'Snapchat Pixel': {
+                globals: ['snaptr'],
+                scripts: ['sc-static.net'],
+                category: 'Marketing',
+                icon: '👻'
+            },
+            'Reddit Pixel': {
+                globals: ['rdt'],
+                scripts: ['reddit.com/pixel'],
+                category: 'Marketing',
+                icon: '🔴'
+            },
+            'Quora Pixel': {
+                globals: ['qp'],
+                scripts: ['quora.com/_/ad'],
+                category: 'Marketing',
+                icon: '❓'
+            },
+            'Criteo': {
+                globals: ['criteo_q'],
+                scripts: ['static.criteo.net'],
+                category: 'Advertising',
+                icon: '🎯'
+            },
+            'Taboola': {
+                globals: ['_tfa'],
+                scripts: ['cdn.taboola.com'],
+                category: 'Advertising',
+                icon: '📰'
+            },
+            'Outbrain': {
+                globals: ['OB_ADV_ID'],
+                scripts: ['outbrain.com'],
+                category: 'Advertising',
+                icon: '📰'
+            },
+
+            // E-commerce
+            'WooCommerce': {
+                globals: ['woocommerce_params', 'wc_add_to_cart_params'],
+                selector: '.woocommerce, link[href*="woocommerce"]',
+                category: 'E-commerce',
+                icon: '🛒'
+            },
+            'BigCommerce': {
+                globals: ['BCData', 'stencilBootstrap'],
+                category: 'E-commerce',
+                icon: '🛒'
+            },
+            'Magento': {
+                globals: ['Mage', 'mage'],
+                selector: 'script[src*="mage"], .cms-index-index',
+                category: 'E-commerce',
+                icon: '🛒'
+            },
+            'PrestaShop': {
+                globals: ['prestashop'],
+                selector: 'meta[name="generator"][content*="PrestaShop"]',
+                category: 'E-commerce',
+                icon: '🛒'
+            },
+            'OpenCart': {
+                scripts: ['catalog/view/javascript'],
+                category: 'E-commerce',
+                icon: '🛒'
+            },
+            'Salesforce Commerce': {
+                globals: ['dw'],
+                scripts: ['demandware.static'],
+                category: 'E-commerce',
+                icon: '☁️'
+            },
+            'Klaviyo': {
+                globals: ['klaviyo', '_learnq'],
+                scripts: ['static.klaviyo.com'],
+                category: 'Marketing',
+                icon: '📧'
+            },
+
+            // Customer Support
+            'Intercom': {
+                globals: ['Intercom', 'intercomSettings'],
+                scripts: ['widget.intercom.io'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+            'Zendesk': {
+                globals: ['zE', 'zESettings', '$zopim'],
+                scripts: ['static.zdassets.com', 'zopim.com'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+            'Drift': {
+                globals: ['drift', 'driftt'],
+                scripts: ['js.driftt.com'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+            'Crisp': {
+                globals: ['$crisp', 'CRISP_WEBSITE_ID'],
+                scripts: ['client.crisp.chat'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+            'LiveChat': {
+                globals: ['LiveChatWidget', '__lc'],
+                scripts: ['cdn.livechatinc.com'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+            'Tawk.to': {
+                globals: ['Tawk_API', 'Tawk_LoadStart'],
+                scripts: ['embed.tawk.to'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+            'HubSpot': {
+                globals: ['HubSpotConversations', '_hsq', 'hubspot'],
+                scripts: ['js.hs-scripts.com', 'js.hubspot.com', 'hscta.net'],
+                category: 'Marketing',
+                icon: '🟠'
+            },
+            'Freshdesk': {
+                globals: ['FreshWidget'],
+                scripts: ['widget.freshworks.com'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+            'Olark': {
+                globals: ['olark'],
+                scripts: ['static.olark.com'],
+                category: 'Customer Support',
+                icon: '💬'
+            },
+
+            // CDN & Performance
+            'Cloudflare': {
+                scripts: ['cdnjs.cloudflare.com', 'cloudflare.com'],
+                selector: 'script[src*="cloudflare"]',
+                category: 'CDN',
+                icon: '☁️'
+            },
+            'Fastly': {
+                scripts: ['fastly.net'],
+                category: 'CDN',
+                icon: '⚡'
+            },
+            'Akamai': {
+                scripts: ['akamai.net', 'akamaized.net', 'akstat.io'],
+                category: 'CDN',
+                icon: '🌐'
+            },
+            'jsDelivr': {
+                scripts: ['cdn.jsdelivr.net'],
+                category: 'CDN',
+                icon: '📦'
+            },
+            'unpkg': {
+                scripts: ['unpkg.com'],
+                category: 'CDN',
+                icon: '📦'
+            },
+            'New Relic': {
+                globals: ['newrelic', 'NREUM'],
+                scripts: ['js-agent.newrelic.com'],
+                category: 'Analytics',
+                icon: '📊'
+            },
+            'Datadog RUM': {
+                globals: ['DD_RUM'],
+                scripts: ['datadoghq.com'],
+                category: 'Analytics',
+                icon: '🐕'
+            },
+            'Sentry': {
+                globals: ['Sentry', '__SENTRY__'],
+                scripts: ['browser.sentry-cdn.com', 'sentry.io'],
+                category: 'Analytics',
+                icon: '🛡️'
+            },
+            'Bugsnag': {
+                globals: ['bugsnag', 'Bugsnag'],
+                scripts: ['bugsnag.com'],
+                category: 'Analytics',
+                icon: '🐛'
+            },
+
+            // A/B Testing
+            'Optimizely': {
+                globals: ['optimizely', 'optimizelyEdge'],
+                scripts: ['cdn.optimizely.com'],
+                category: 'A/B Testing',
+                icon: '🧪'
+            },
+            'VWO': {
+                globals: ['_vwo_code', 'VWO', '_vis_opt'],
+                scripts: ['dev.visualwebsiteoptimizer.com'],
+                category: 'A/B Testing',
+                icon: '🧪'
+            },
+            'Google Optimize': {
+                globals: ['google_optimize', 'dataLayer'],
+                scripts: ['googleoptimize.com'],
+                category: 'A/B Testing',
+                icon: '🧪'
+            },
+            'AB Tasty': {
+                globals: ['ABTasty'],
+                scripts: ['abtasty.com'],
+                category: 'A/B Testing',
+                icon: '🧪'
+            },
+            'LaunchDarkly': {
+                globals: ['LDClient'],
+                scripts: ['launchdarkly.com'],
+                category: 'A/B Testing',
+                icon: '🚀'
+            },
+            'Split.io': {
+                globals: ['splitio'],
+                scripts: ['split.io'],
+                category: 'A/B Testing',
+                icon: '🧪'
+            },
+
+            // Payment
+            'Stripe': {
+                globals: ['Stripe'],
+                scripts: ['js.stripe.com'],
+                category: 'Payment',
+                icon: '💳'
+            },
+            'PayPal': {
+                globals: ['paypal', 'PAYPAL'],
+                scripts: ['paypal.com/sdk', 'paypalobjects.com'],
+                category: 'Payment',
+                icon: '💳'
+            },
+            'Braintree': {
+                globals: ['braintree'],
+                scripts: ['js.braintreegateway.com'],
+                category: 'Payment',
+                icon: '💳'
+            },
+            'Square': {
+                globals: ['SqPaymentForm', 'Square'],
+                scripts: ['squareup.com', 'square.com'],
+                category: 'Payment',
+                icon: '💳'
+            },
+            'Klarna': {
+                globals: ['Klarna', 'KlarnaOnsiteService'],
+                scripts: ['klarna.com'],
+                category: 'Payment',
+                icon: '💳'
+            },
+            'Afterpay': {
+                globals: ['AfterPay', 'Afterpay'],
+                scripts: ['afterpay.com', 'squarecdn.com/afterpay'],
+                category: 'Payment',
+                icon: '💳'
+            },
+
+            // Security
+            'reCAPTCHA': {
+                globals: ['grecaptcha'],
+                scripts: ['google.com/recaptcha', 'gstatic.com/recaptcha'],
+                category: 'Security',
+                icon: '🔒'
+            },
+            'hCaptcha': {
+                globals: ['hcaptcha'],
+                scripts: ['hcaptcha.com'],
+                category: 'Security',
+                icon: '🔒'
+            },
+            'Cloudflare Turnstile': {
+                globals: ['turnstile'],
+                scripts: ['challenges.cloudflare.com/turnstile'],
+                category: 'Security',
+                icon: '🔒'
+            },
+
+            // Fonts
+            'Google Fonts': {
+                selector: 'link[href*="fonts.googleapis.com"], link[href*="fonts.gstatic.com"]',
+                scripts: ['fonts.googleapis.com'],
+                category: 'Fonts',
+                icon: '🔤'
+            },
+            'Adobe Fonts': {
+                globals: ['Typekit'],
+                scripts: ['use.typekit.net'],
+                category: 'Fonts',
+                icon: '🔤'
+            },
+            'Font Awesome': {
+                selector: 'link[href*="fontawesome"], .fa, .fas, .fab, .far',
+                scripts: ['fontawesome'],
+                category: 'Fonts',
+                icon: '🎨'
+            },
+
+            // CSS Frameworks
+            'Bootstrap': {
+                selector: 'link[href*="bootstrap"]',
+                scripts: ['bootstrap'],
+                category: 'CSS Framework',
+                icon: '🅱️',
+                getVersion: () => window.bootstrap?.Modal?.VERSION
+            },
+            'Tailwind CSS': {
+                selector: '[class*="tw-"], .container, .flex, .grid, .bg-',
+                category: 'CSS Framework',
+                icon: '🎨'
+            },
+            'Bulma': {
+                selector: 'link[href*="bulma"]',
+                category: 'CSS Framework',
+                icon: '🟢'
+            },
+            'Foundation': {
+                globals: ['Foundation'],
+                selector: 'link[href*="foundation"]',
+                category: 'CSS Framework',
+                icon: '🏗️'
+            },
+            'Material UI': {
+                selector: '[class*="MuiBox"], [class*="MuiButton"], [class*="makeStyles"]',
+                category: 'CSS Framework',
+                icon: '🎨'
+            },
+            'Chakra UI': {
+                selector: '[class*="chakra-"]',
+                category: 'CSS Framework',
+                icon: '⚡'
+            },
+            'Ant Design': {
+                selector: '[class*="ant-"], .antd',
+                category: 'CSS Framework',
+                icon: '🐜'
+            },
+        };
+
+        for (const [name, sig] of Object.entries(TECH_SIGNATURES)) {
+            let found = false;
+            let version = null;
+            let details = null;
+
+            // Check globals (highest priority)
+            if (sig.globals) {
+                for (const g of sig.globals) {
+                    try {
+                        if (window[g] !== undefined && window[g] !== null) {
+                            found = true;
+                            break;
+                        }
+                    } catch (e) { }
+                }
+            }
+
+            // Check scripts
+            if (!found && sig.scripts) {
+                for (const pattern of sig.scripts) {
+                    if (scripts.some(s => s.includes(pattern.toLowerCase()))) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check selectors
+            if (!found && sig.selector) {
+                try {
+                    if (document.querySelector(sig.selector)) {
+                        found = true;
+                    }
+                } catch (e) { }
+            }
+
+            // Check HTML content for inline scripts
+            if (!found && sig.scripts) {
+                for (const pattern of sig.scripts) {
+                    if (html.includes(pattern.toLowerCase())) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (found) {
+                // Get version if available
+                if (sig.getVersion) {
+                    try {
+                        version = sig.getVersion();
+                    } catch (e) { }
+                }
+
+                // Get details if available
+                if (sig.getDetails) {
+                    try {
+                        details = sig.getDetails();
+                    } catch (e) { }
+                }
+
+                detected.push({
+                    name,
+                    category: sig.category,
+                    icon: sig.icon,
+                    version: version || null,
+                    details: details || null
+                });
+            }
+        }
+
+        // Sort by category then name
+        detected.sort((a, b) => {
+            if (a.category !== b.category) return a.category.localeCompare(b.category);
+            return a.name.localeCompare(b.name);
+        });
+
+        return detected;
     }
 
     console.log('[Swiss Knife] Page script initialized');

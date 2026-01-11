@@ -147,9 +147,63 @@ export function decodeGA4Request(url) {
       decoded[key].name = `User Property (Number): ${key.slice(4)}`;
       decoded[key].description = 'Custom user property (number)';
     }
+
+    // Special Handling for Consent Parameters
+    if (key === 'gcs') {
+      decoded[key].decoded = decodeGCS(value);
+    } else if (key === 'gcd') {
+      decoded[key].decoded = decodeGCD(value);
+    }
   }
 
   return decoded;
+}
+
+/**
+ * Decode GCS (Google Consent Status) parameter
+ * Format: G1<ad_storage><analytics_storage>
+ * 1 = granted, 0 = denied
+ */
+function decodeGCS(value) {
+  if (!value || value.length < 3) return null;
+  const ad = value.charAt(2);
+  const analytics = value.charAt(3);
+
+  const map = { '1': 'Granted', '0': 'Denied' };
+  return {
+    ad_storage: map[ad] || 'Unknown',
+    analytics_storage: map[analytics] || 'Unknown'
+  };
+}
+
+/**
+ * Decode GCD (Google Consent Default) parameter (Consent V2)
+ * Format: 1<ad_storage><analytics_storage><ad_user_data><ad_personalization><direction>
+ * Signals: p, q, r, t, u, v, l
+ */
+function decodeGCD(value) {
+  // Typical GCD: 11p1p1p1r5 or 13p3p3p3r5
+  // We care about the characters at specific indices (usually 2, 4, 6, 8)
+  if (!value || value.length < 10) return null;
+
+  const signals = {
+    'p': { default: 'Denied', update: 'None' },
+    'q': { default: 'Denied', update: 'Denied' },
+    'r': { default: 'Denied', update: 'Granted' },
+    't': { default: 'Granted', update: 'None' },
+    'u': { default: 'Granted', update: 'Denied' },
+    'v': { default: 'Granted', update: 'Granted' },
+    'l': { default: 'None', update: 'None' }
+  };
+
+  const decode = (char) => signals[char] || { default: 'Unknown', update: 'Unknown' };
+
+  return {
+    ad_storage: decode(value.charAt(2)),
+    analytics_storage: decode(value.charAt(4)),
+    ad_user_data: decode(value.charAt(6)),
+    ad_personalization: decode(value.charAt(8))
+  };
 }
 
 /**

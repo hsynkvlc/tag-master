@@ -13,10 +13,14 @@
     <!-- Header -->
     <header class="header">
       <div class="header-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="min-width:20px">
           <path d="M14.5 2L4 12.5V18h5.5L20 7.5c.83-.83.83-2.17 0-3L17 1.5c-.83-.83-2.17-.83-3 0l-.5.5z" />
         </svg>
-        <span>Swiss Knife for Google</span>
+        <div style="display:flex;flex-direction:column;line-height:1.1">
+          <span>Swiss Knife for Google</span>
+          <span style="font-size:9px;font-style:italic;color:var(--text-secondary);font-weight:400">One Extension to
+            Rule Them All</span>
+        </div>
       </div>
       <div class="header-actions">
         <button class="btn-icon" id="themeToggle" title="Toggle Light/Dark Mode">
@@ -111,6 +115,21 @@
         </svg>
         <span>Consent</span>
       </button>
+      <button class="tab" data-tab="tech">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+          <rect x="9" y="9" width="6" height="6" />
+          <line x1="9" y1="1" x2="9" y2="4" />
+          <line x1="15" y1="1" x2="15" y2="4" />
+          <line x1="9" y1="20" x2="9" y2="23" />
+          <line x1="15" y1="20" x2="15" y2="23" />
+          <line x1="20" y1="9" x2="23" y2="9" />
+          <line x1="20" y1="14" x2="23" y2="14" />
+          <line x1="1" y1="9" x2="4" y2="9" />
+          <line x1="1" y1="14" x2="4" y2="14" />
+        </svg>
+        <span>Tech</span>
+      </button>
       <button class="tab" data-tab="push">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="22" y1="2" x2="11" y2="13" />
@@ -124,64 +143,50 @@
     <div id="welcomeOverlay"
       style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg-primary);z-index:9999;flex-direction:column;padding:30px;text-align:center;justify-content:center;align-items:center">
       <div
-        style="background:var(--google-blue);width:60px;height:60px;border-radius:18px;display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 10px 20px rgba(66, 133, 244, 0.3)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" style="width:32px;height:32px">
-          <path d="M14.5 2L4 12.5V18h5.5L20 7.5c.83-.83.83-2.17 0-3L17 1.5c-.83-.83-2.17-.83-3 0l-.5.5z" />
+        style="background:var(--google-red);width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:24px;box-shadow:0 10px 30px rgba(234, 67, 53, 0.4);animation: pulse 2s infinite">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" style="width:34px;height:34px">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
         </svg>
       </div>
-      <h1 style="font-size:22px;font-weight:800;margin-bottom:10px;color:var(--text-primary)">Welcome to Swiss Knife
-      </h1>
-      <p style="color:var(--text-secondary);font-size:13px;line-height:1.6;margin-bottom:30px">Your ultimate companion
-        for Google Tag Manager and GA4 debugging.</p>
+      <h1 style="font-size:24px;font-weight:900;margin-bottom:12px;color:var(--text-primary);letter-spacing:-0.5px">One
+        Extension to Rule Them All</h1>
+      <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin-bottom:32px;font-style:italic">"In the
+        land of Data Layer where the shadows lie..."</p>
 
       <div
-        style="display:grid;grid-template-columns:1fr;gap:12px;width:100%;max-width:280px;text-align:left;margin-bottom:40px">
+        style="display:grid;grid-template-columns:1fr;gap:16px;width:100%;max-width:280px;text-align:left;margin-bottom:44px">
         <div
-          style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border)">
-          <div style="color:var(--google-blue)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
-          </div>
+          style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-surface);border-radius:16px;border:1px solid var(--border)">
+          <div style="font-size:24px">🪄</div>
           <div>
-            <div style="font-size:11px;font-weight:700">Quick GTM Injection</div>
-            <div style="font-size:9px;color:var(--text-muted)">Inject any container instantly</div>
+            <div style="font-size:12px;font-weight:800">GTM Sorcery</div>
+            <div style="font-size:10px;color:var(--text-muted)">Inject containers like a digital wizard.</div>
           </div>
         </div>
         <div
-          style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border)">
-          <div style="color:var(--google-green)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
-            </svg>
-          </div>
+          style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-surface);border-radius:16px;border:1px solid var(--border)">
+          <div style="font-size:24px">👁️</div>
           <div>
-            <div style="font-size:11px;font-weight:700">Real-time Hit Monitor</div>
-            <div style="font-size:9px;color:var(--text-muted)">Inspect GA4 parameters decoded</div>
+            <div style="font-size:12px;font-weight:800">The Eye of GA4</div>
+            <div style="font-size:10px;color:var(--text-muted)">See every hit, even the ones trying to hide.</div>
           </div>
         </div>
         <div
-          style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg-surface);border-radius:12px;border:1px solid var(--border)">
-          <div style="color:var(--google-yellow)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-          </div>
+          style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-surface);border-radius:16px;border:1px solid var(--border)">
+          <div style="font-size:24px">⚖️</div>
           <div>
-            <div style="font-size:11px;font-weight:700">Audit & Compliance</div>
-            <div style="font-size:9px;color:var(--text-muted)">One-click tracking readiness check</div>
+            <div style="font-size:12px;font-weight:800">Council of Compliance</div>
+            <div style="font-size:10px;color:var(--text-muted)">One audit to find them, one click to bind them.</div>
           </div>
         </div>
       </div>
 
       <button id="getStartedBtn" class="btn"
-        style="width:100%;max-width:280px;padding:14px;background:var(--google-blue);color:white;border:none;box-shadow:0 5px 15px rgba(66, 133, 244, 0.4);border-radius:12px;font-weight:700;font-size:14px;cursor:pointer">
-        Get Started
+        style="width:100%;max-width:280px;padding:16px;background:linear-gradient(135deg, var(--google-red), #b22d21);color:white;border:none;box-shadow:0 8px 24px rgba(234, 67, 53, 0.4);border-radius:14px;font-weight:800;font-size:15px;cursor:pointer;text-transform:uppercase;letter-spacing:1px">
+        Unleash the Power
       </button>
-      <div style="margin-top:20px;font-size:10px;color:var(--text-muted)">v1.2.0 • Developer Edition</div>
+      <div style="margin-top:28px;font-size:11px;color:var(--text-muted);font-weight:600">Forged in the fires of Digital
+        Up • v1.2.0</div>
     </div>
 
     <!-- Content -->
@@ -289,6 +294,28 @@
 
       <!-- Monitor Panel (DataLayer) -->
       <div class="panel" id="panel-monitor">
+        <!-- Event Timeline -->
+        <div class="section" id="timelineSection" style="display:none">
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              Event Timeline
+            </div>
+            <button class="btn-icon" id="toggleTimeline" title="Toggle Timeline">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          </div>
+          <div id="eventTimeline" class="event-timeline" style="padding:12px 0;overflow-x:auto">
+            <!-- Timeline visualization will be rendered here -->
+          </div>
+        </div>
+
         <div class="section">
           <div class="section-title"
             style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -302,6 +329,13 @@
               DataLayer Events
             </div>
             <div style="display:flex;gap:4px">
+              <button class="btn-icon" id="showTimeline" title="Show Timeline">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </button>
               <button class="btn-icon" id="exportJson" title="Export as JSON">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                   style="width:14px;height:14px">
@@ -323,14 +357,19 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;margin-bottom:12px">
-            <input type="text" class="input" id="eventFilter" placeholder="Filter events..." style="flex:1">
-            <button class="btn btn-secondary" id="clearEvents">
+            <input type="text" class="input" id="eventFilter"
+              placeholder="view_item, add_to_cart, begin_checkout, purchase..." style="flex:1">
+            <button class="btn btn-secondary" id="clearEvents" title="Clear (Ctrl+L)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 style="width:14px;height:14px">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
             </button>
+          </div>
+          <!-- Quick Filter Chips -->
+          <div id="filterChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+            <!-- Filter chips will be rendered here -->
           </div>
         </div>
         <div class="event-list" id="eventList">
@@ -352,13 +391,23 @@
               </svg>
               Google Requests Only
             </div>
-            <button class="btn btn-secondary" id="clearNetwork" title="Clear All Hits">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                style="width:14px;height:14px">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-              </svg>
-            </button>
+            <div style="display:flex;gap:4px">
+              <button class="btn-icon" id="exportHar" title="Export as HAR">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </button>
+              <button class="btn btn-secondary" id="clearNetwork" title="Clear All Hits">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                </svg>
+              </button>
+            </div>
           </div>
           <div style="display:flex;gap:8px;margin-bottom:12px">
             <input type="text" class="input" id="networkFilter" placeholder="Filter requests (e.g. 'purchase', 'G-')..."
@@ -421,6 +470,47 @@
             <!-- Cookies will be added here -->
           </div>
         </div>
+
+        <!-- Test _gcl_aw Cookie Section -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <path
+                  d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+              </svg>
+              Test Google Ads Click
+            </div>
+          </div>
+          <div
+            style="padding:12px;background:var(--bg-secondary);border-radius:8px;border:1px dashed var(--border-color)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <span style="font-size:11px;font-weight:600;color:var(--warning-yellow)">Testing Only</span>
+              <span style="font-size:10px;color:var(--text-muted)">Creates a dummy _gcl_aw cookie (GCLID)</span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" id="addTestGclAw" style="flex:1;font-size:11px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:12px;height:12px;margin-right:4px">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add Test _gcl_aw
+              </button>
+              <button class="btn btn-secondary" id="deleteTestGclAw" style="flex:1;font-size:11px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:12px;height:12px;margin-right:4px">
+                  <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                Delete _gcl_aw
+              </button>
+            </div>
+            <p style="font-size:10px;color:var(--text-muted);margin-top:8px;line-height:1.4">
+              Simulates a Google Ads click (GCLID) for testing conversion tracking. Remember to delete after testing.
+            </p>
+          </div>
+        </div>
       </div>
 
       <!-- Consent Panel -->
@@ -444,7 +534,7 @@
             style="display:none;margin-bottom:12px;padding:10px;background:rgba(234,67,53,0.1);border:1px solid var(--google-red);border-radius:6px;font-size:11px;color:var(--google-red)">
             <strong>⚠️ Consent Mode V2 Issues:</strong> <br> ad_user_data or ad_personalization is missing.
           </div>
-          <div class="container-list" id="consentList">
+          <div class="container-list" id="consentList" style="display: grid; grid-template-columns: 1fr; gap: 8px;">
             <div class="empty-state">
               <p>Checking consent state...</p>
             </div>
@@ -456,6 +546,62 @@
             Google Consent Mode V2 requires <strong>ad_user_data</strong> and <strong>ad_personalization</strong> for
             EEA users to maintain remarketing capabilities in Google Ads.
           </p>
+        </div>
+
+        <!-- CSP Checker Section -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              CSP Compatibility Check
+            </div>
+            <button class="btn-icon" id="refreshCSP" title="Check CSP">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+          </div>
+          <p style="font-size:10px;color:var(--text-muted);margin-bottom:10px">
+            Checks if the page's Content Security Policy allows Google tags to function properly.
+          </p>
+          <div id="cspResults" class="container-list">
+            <div class="empty-state">
+              <p>Click refresh to check CSP</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tech Stack Panel -->
+      <div class="panel" id="panel-tech">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+                <rect x="9" y="9" width="6" height="6" />
+              </svg>
+              Technology Stack
+            </div>
+            <button class="btn-icon" id="refreshTech" title="Refresh Technologies">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+          </div>
+          <p style="font-size:10px;color:var(--text-muted);margin-bottom:12px">
+            Detected technologies, frameworks, and tools used on this page.
+          </p>
+          <div id="techResults" class="container-list">
+            <div class="empty-state">
+              <p>Click refresh to detect technologies</p>
+            </div>
+          </div>
         </div>
       </div>
 
