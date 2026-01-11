@@ -326,6 +326,12 @@
         const selector = getCssSelector(target);
         const jsPath = getJsPath(target);
 
+        // Capture attributes for better trigger suggestions
+        const attributes = {};
+        for (const attr of target.attributes) {
+            attributes[attr.name] = attr.value;
+        }
+
         window.postMessage({
             source: SWISS_KNIFE_ID,
             type: 'SELECTOR_RESULT',
@@ -334,6 +340,9 @@
                 selector: selector,
                 jsPath: jsPath,
                 tagName: target.tagName,
+                id: target.id,
+                classes: Array.from(target.classList),
+                attributes: attributes,
                 innerText: target.innerText?.trim().substring(0, 100)
             }
         }, '*');

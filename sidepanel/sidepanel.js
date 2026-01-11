@@ -114,6 +114,7 @@ const elements = {
   pickedJsVar: document.getElementById('pickedJsVar'),
   copyJsVar: document.getElementById('copyJsVar'),
   saveAsSnippet: document.getElementById('saveAsSnippet'),
+  triggerSuggestions: document.getElementById('triggerSuggestions'),
   // Cookies
   refreshCookies: document.getElementById('refreshCookies'),
   cookieList: document.getElementById('cookieList'),
@@ -822,31 +823,80 @@ chrome.runtime.onMessage.addListener((message) => {
       showToast(message.payload.error, 'error');
       return;
     }
-    const { selector, tagName } = message.payload;
+    const { selector, tagName, id, classes, attributes, innerText } = message.payload;
     if (!selector) return;
 
     // UI Updates
     if (elements.selectorResult) {
       elements.selectorResult.style.display = 'block';
       elements.selectorResult.classList.remove('result-pulse');
-      void elements.selectorResult.offsetWidth; // Trigger reflow
+      void elements.selectorResult.offsetWidth;
       elements.selectorResult.classList.add('result-pulse');
     }
     if (elements.testResultArea) elements.testResultArea.style.display = 'none';
     if (elements.pickedSelector) elements.pickedSelector.textContent = selector;
 
-    // Scroll to results
-    if (elements.selectorResult) {
-      setTimeout(() => {
-        elements.selectorResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 100);
+    // 1. Generate Trigger Suggestions
+    let triggerHtml = '<div style="display:flex;flex-direction:column;gap:8px">';
+    const suggestions = [];
+
+    if (id) {
+      suggestions.push({
+        type: 'Click ID',
+        condition: 'equals',
+        value: id,
+        desc: 'Most stable method'
+      });
     }
 
-    // Generate Code
+    if (classes && classes.length > 0) {
+      suggestions.push({
+        type: 'Click Classes',
+        condition: 'contains',
+        value: classes[0],
+        desc: 'Class-based targeting'
+      });
+    }
+
+    // data-attributes are gold for GTM
+    Object.keys(attributes || {}).forEach(attr => {
+      if (attr.startsWith('data-')) {
+        suggestions.push({
+          type: 'Click Element',
+          condition: 'matches CSS selector',
+          value: `[${attr}="${attributes[attr]}"]`,
+          desc: 'Flexible data-attribute'
+        });
+      }
+    });
+
+    // Fallback: CSS Selector
+    suggestions.push({
+      type: 'Click Element',
+      condition: 'matches CSS selector',
+      value: selector,
+      desc: 'Hierarchical path'
+    });
+
+    triggerHtml += suggestions.map(s => `
+      <div style="background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:4px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-weight:bold;color:var(--google-blue)">${s.type}</span>
+          <span style="font-size:9px;color:var(--text-muted)">${s.desc}</span>
+        </div>
+        <div style="font-size:10px;margin-bottom:4px">Condition: <span style="color:var(--text-secondary)">${s.condition}</span></div>
+        <div style="font-family:monospace;background:var(--bg-primary);padding:4px;border-radius:2px;word-break:break-all">${s.value}</div>
+      </div>
+    `).join('');
+    triggerHtml += '</div>';
+
+    if (elements.triggerSuggestions) {
+      elements.triggerSuggestions.innerHTML = triggerHtml;
+    }
+
+    // 2. Generate Code
     const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tagName);
     const getter = isInput ? 'el.value' : 'el.innerText';
-
-    // Escape quotes for the querySelector string
     const escapedSelector = selector.replace(/'/g, "\\'");
 
     const gtmCode = `function() {
@@ -864,7 +914,7 @@ chrome.runtime.onMessage.addListener((message) => {
     if (elements.pickedJsVar) elements.pickedJsVar.textContent = gtmCode;
     if (elements.pickedJsTest) elements.pickedJsTest.textContent = testCode;
 
-    showToast('Variable generated!', 'success');
+    showToast('Trigger & Variable generated!', 'success');
   }
 });
 
