@@ -750,7 +750,10 @@ function renderNetworkRequests() {
     });
 
     elements.networkList.querySelectorAll('.network-item').forEach(item => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
+        // Don't toggle if clicking inside details (to allow selection)
+        if (e.target.closest('.network-details')) return;
+
         const detailsEl = item.querySelector('.network-details');
         const isExpanded = detailsEl.style.display !== 'none';
         detailsEl.style.display = isExpanded ? 'none' : 'block';
