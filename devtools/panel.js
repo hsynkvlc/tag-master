@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - DevTools Panel (Vanilla JS)
+ * Tag Master - DevTools Panel (Vanilla JS)
  */
 
 // ============================================

@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - Page Script
+ * Tag Master - Page Script
  * Injected into the MAIN world to access window.dataLayer and Google objects
  */
 
@@ -36,7 +36,7 @@
             sendEvent('existing', event, index);
         });
         window.__swissKnife.initialized = true;
-        console.log('[Swiss Knife] Monitoring DataLayer:', dlName);
+        console.log('[Tag Master] Monitoring DataLayer:', dlName);
     }
 
     // Periodically re-check for DataLayer name changes (e.g. if GTM loads late)
@@ -46,7 +46,7 @@
                 if (key.startsWith('GTM-') && window.google_tag_manager[key].dataLayer) {
                     const newName = window.google_tag_manager[key].dataLayer.name;
                     if (newName && newName !== window.__swissKnife.dataLayerName) {
-                        console.log('[Swiss Knife] DataLayer name change detected:', newName);
+                        console.log('[Tag Master] DataLayer name change detected:', newName);
                         window.__swissKnife.dataLayerName = newName;
                         // Trigger re-init logic if needed
                     }
@@ -220,10 +220,10 @@
             case 'GET_CONSENT_STATE':
                 try {
                     const consentData = getConsentState();
-                    console.log('[Swiss Knife] Consent data retrieved:', consentData);
+                    console.log('[Tag Master] Consent data retrieved:', consentData);
                     reply('CONSENT_STATE', consentData);
                 } catch (error) {
-                    console.error('[Swiss Knife] Error getting consent state:', error);
+                    console.error('[Tag Master] Error getting consent state:', error);
                     reply('CONSENT_STATE', { error: error.message });
                 }
                 break;
@@ -274,7 +274,7 @@
         selectorActive = true;
         lastRequestId = requestId;
 
-        console.log('[Swiss Knife] Selector mode active for req:', requestId);
+        console.log('[Tag Master] Selector mode active for req:', requestId);
 
         if (!highlightEl) {
             highlightEl = document.createElement('div');
@@ -286,7 +286,7 @@
             const badge = document.createElement('div');
             badge.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#4285f4;color:white;padding:8px 16px;border-radius:20px;font-family:sans-serif;font-size:12px;font-weight:bold;z-index:2147483647;box-shadow:0 4px 12px rgba(0,0,0,0.2);pointer-events:none;';
             badge.id = 'swiss-knife-selector-badge';
-            badge.innerHTML = '<span style="margin-right:8px">🎯</span> Swiss Knife Selection Mode <span style="margin-left:8px;opacity:0.7;font-weight:normal">(ESC to cancel)</span>';
+            badge.innerHTML = '<span style="margin-right:8px">🎯</span> Tag Master Selection Mode <span style="margin-left:8px;opacity:0.7;font-weight:normal">(ESC to cancel)</span>';
             document.body.appendChild(badge);
         } else {
             document.getElementById('swiss-knife-selector-badge').style.display = 'block';
@@ -500,13 +500,13 @@
 
     // Auto-block check for GA4
     if (window.sessionStorage.getItem('swissKnifeBlockGA4') === 'true') {
-        console.warn('[Swiss Knife] Blocking GA4 Hits (Simulation Mode)');
+        console.warn('[Tag Master] Blocking GA4 Hits (Simulation Mode)');
 
         // Block sendBeacon
         const originalSendBeacon = navigator.sendBeacon;
         navigator.sendBeacon = function (url, data) {
             if (url && (url.includes('google-analytics.com') || url.includes('analytics.google.com'))) {
-                console.info('[Swiss Knife] Blocked GA4 Beacon:', url);
+                console.info('[Tag Master] Blocked GA4 Beacon:', url);
                 return true;
             }
             return originalSendBeacon.apply(this, arguments);
@@ -519,7 +519,7 @@
             Object.defineProperty(img, 'src', {
                 set: function (url) {
                     if (url && (url.includes('google-analytics.com') || url.includes('analytics.google.com'))) {
-                        console.info('[Swiss Knife] Blocked GA4 Pixel:', url);
+                        console.info('[Tag Master] Blocked GA4 Pixel:', url);
                         return;
                     }
                     this.setAttribute('src', url);
@@ -534,7 +534,7 @@
         window.fetch = function (input, init) {
             const url = typeof input === 'string' ? input : input?.url;
             if (url && (url.includes('google-analytics.com') || url.includes('analytics.google.com'))) {
-                console.info('[Swiss Knife] Blocked GA4 Fetch:', url);
+                console.info('[Tag Master] Blocked GA4 Fetch:', url);
                 return Promise.resolve(new Response(null, { status: 200 }));
             }
             return originalFetch.apply(this, arguments);
@@ -545,7 +545,7 @@
         XMLHttpRequest.prototype.open = function (method, url) {
             if (url && (typeof url === 'string') && (url.includes('google-analytics.com') || url.includes('analytics.google.com'))) {
                 this._blocked = true;
-                console.info('[Swiss Knife] Blocked GA4 XHR:', url);
+                console.info('[Tag Master] Blocked GA4 XHR:', url);
             }
             return originalOpen.apply(this, arguments);
         };
@@ -640,7 +640,7 @@
                 waitForUpdate = hasDefault && !hasUpdate;
             }
         } catch (e) {
-            console.warn('[Swiss Knife] Error reading GTM consent:', e);
+            console.warn('[Tag Master] Error reading GTM consent:', e);
         }
 
         // 1.5. Check window.google_tag_manager internal structures
@@ -1605,5 +1605,5 @@
         return detected;
     }
 
-    console.log('[Swiss Knife] Page script initialized');
+    console.log('[Tag Master] Page script initialized');
 })();

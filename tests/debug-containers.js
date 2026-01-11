@@ -31,7 +31,7 @@ const path = require('path');
   // Listen to console
   page.on('console', msg => {
     const text = msg.text();
-    if (text.includes('Swiss Knife') || text.includes('GTM') || text.includes('Error')) {
+    if (text.includes('Tag Master') || text.includes('GTM') || text.includes('Error')) {
       console.log('[Page Console]', text);
     }
   });
@@ -58,7 +58,7 @@ const path = require('path');
   console.log('  dataLayer length:', pageState.dataLayerLength);
   console.log('  google_tag_manager exists:', pageState.hasGTM);
   console.log('  GTM keys:', pageState.gtmKeys.length > 0 ? pageState.gtmKeys.join(', ') : 'none');
-  console.log('  Swiss Knife injected:', pageState.hasSwissKnife);
+  console.log('  Tag Master injected:', pageState.hasSwissKnife);
 
   // Try sending message to content script
   console.log('\n📋 Testing message to content script...');

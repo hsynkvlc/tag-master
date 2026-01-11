@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - Background Service Worker
+ * Tag Master - Background Service Worker
  * Handles: Network interception, storage, message passing, session management
  */
 
@@ -147,7 +147,7 @@ async function startSession() {
   };
 
   await dbAdd('sessions', currentSession);
-  console.log('[Swiss Knife] Session started:', currentSession.id);
+  console.log('[Tag Master] Session started:', currentSession.id);
   return currentSession;
 }
 
@@ -308,7 +308,7 @@ async function addRecentGTMId(gtmId) {
 // ============================================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender).then(sendResponse).catch(error => {
-    console.error('[Swiss Knife] Message error:', error);
+    console.error('[Tag Master] Message error:', error);
     sendResponse({ error: error.message });
   });
   return true; // Keep channel open for async response
@@ -502,7 +502,7 @@ async function handleMessage(message, sender) {
       return sessionTab ? (tabSessions[sessionTab.id] || null) : null;
 
     default:
-      console.warn('[Swiss Knife] Unknown message type:', message.type);
+      console.warn('[Tag Master] Unknown message type:', message.type);
       return { error: 'Unknown message type' };
   }
 }
@@ -604,15 +604,15 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 // Initialization
 // ============================================
 async function initialize() {
-  console.log('[Swiss Knife] Initializing...');
+  console.log('[Tag Master] Initializing...');
 
   try {
     await initDatabase();
     await loadSettings();
     await startSession();
-    console.log('[Swiss Knife] Initialized successfully');
+    console.log('[Tag Master] Initialized successfully');
   } catch (error) {
-    console.error('[Swiss Knife] Initialization error:', error);
+    console.error('[Tag Master] Initialization error:', error);
   }
 }
 

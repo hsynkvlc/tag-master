@@ -8,7 +8,7 @@
     }
   ],
   "project": {
-    "name": "Swiss Knife for Google",
+    "name": "Tag Master",
     "type": "chrome-extension",
     "stack": ["JavaScript", "HTML", "CSS", "Chrome Extensions API"]
   }

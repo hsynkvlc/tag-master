@@ -1,59 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Swiss Knife for Google - DevTools</title>
+  <title>Tag Master - DevTools</title>
   <link rel="stylesheet" href="panel.css">
 </head>
+
 <body>
   <div class="devtools-app">
     <!-- Header -->
     <header class="devtools-header">
       <div class="devtools-logo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14.5 2L4 12.5V18h5.5L20 7.5c.83-.83.83-2.17 0-3L17 1.5c-.83-.83-2.17-.83-3 0l-.5.5z"/>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:#4285F4">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+          <line x1="7" y1="7" x2="7.01" y2="7" />
         </svg>
-        <span>Swiss Knife for Google</span>
+        <span>Tag Master</span>
       </div>
       <div class="devtools-tabs">
         <button class="devtools-tab active" data-tab="network">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="2" y1="12" x2="22" y2="12"/>
-            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
           </svg>
           Network
         </button>
         <button class="devtools-tab" data-tab="datalayer">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-            <polyline points="2 17 12 22 22 17"/>
-            <polyline points="2 12 12 17 22 12"/>
+            <polygon points="12 2 2 7 12 12 22 7 12 2" />
+            <polyline points="2 17 12 22 22 17" />
+            <polyline points="2 12 12 17 22 12" />
           </svg>
           DataLayer
         </button>
         <button class="devtools-tab" data-tab="ads">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <line x1="9" y1="9" x2="15" y2="15"/>
-            <line x1="15" y1="9" x2="9" y2="15"/>
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+            <line x1="15" y1="9" x2="9" y2="15" />
           </svg>
           Google Ads
         </button>
         <button class="devtools-tab" data-tab="cookies">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <circle cx="8" cy="9" r="1" fill="currentColor"/>
-            <circle cx="15" cy="8" r="1" fill="currentColor"/>
-            <circle cx="10" cy="14" r="1" fill="currentColor"/>
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="8" cy="9" r="1" fill="currentColor" />
+            <circle cx="15" cy="8" r="1" fill="currentColor" />
+            <circle cx="10" cy="14" r="1" fill="currentColor" />
           </svg>
           Cookies
         </button>
         <button class="devtools-tab" data-tab="code">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="16 18 22 12 16 6"/>
-            <polyline points="8 6 2 12 8 18"/>
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
           </svg>
           Code
         </button>
@@ -68,26 +71,31 @@
           <input type="text" class="toolbar-input" id="networkFilter" placeholder="Filter requests...">
           <div class="toolbar-separator"></div>
           <div class="filter-pills" id="typeFilters">
-            <button class="filter-pill active" data-type="GA4"><span class="dot" style="background:#F9AB00"></span>GA4</button>
-            <button class="filter-pill active" data-type="UA"><span class="dot" style="background:#E37400"></span>UA</button>
-            <button class="filter-pill active" data-type="GOOGLE_ADS_CONVERSION"><span class="dot" style="background:#4285F4"></span>Ads</button>
-            <button class="filter-pill active" data-type="FLOODLIGHT"><span class="dot" style="background:#EA4335"></span>Floodlight</button>
-            <button class="filter-pill active" data-type="GTM"><span class="dot" style="background:#4285F4"></span>GTM</button>
+            <button class="filter-pill active" data-type="GA4"><span class="dot"
+                style="background:#F9AB00"></span>GA4</button>
+            <button class="filter-pill active" data-type="UA"><span class="dot"
+                style="background:#E37400"></span>UA</button>
+            <button class="filter-pill active" data-type="GOOGLE_ADS_CONVERSION"><span class="dot"
+                style="background:#4285F4"></span>Ads</button>
+            <button class="filter-pill active" data-type="FLOODLIGHT"><span class="dot"
+                style="background:#EA4335"></span>Floodlight</button>
+            <button class="filter-pill active" data-type="GTM"><span class="dot"
+                style="background:#4285F4"></span>GTM</button>
           </div>
           <div class="toolbar-separator"></div>
           <button class="toolbar-btn" id="preserveLogBtn">Preserve Log</button>
           <button class="toolbar-btn" id="clearNetworkBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
             </svg>
             Clear
           </button>
           <button class="toolbar-btn" id="exportNetworkBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
             Export
           </button>
@@ -121,8 +129,8 @@
           <div style="flex:1"></div>
           <button class="toolbar-btn" id="clearDatalayerBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
             </svg>
             Clear
           </button>
@@ -149,7 +157,8 @@
       <!-- Google Ads Panel -->
       <div class="devtools-panel" id="panel-ads">
         <div class="toolbar">
-          <span style="color:var(--text-secondary);font-size:11px">Google Ads Conversion & Enhanced Conversions Inspector</span>
+          <span style="color:var(--text-secondary);font-size:11px">Google Ads Conversion & Enhanced Conversions
+            Inspector</span>
         </div>
         <div class="split-pane">
           <div class="split-pane-content">
@@ -179,16 +188,16 @@
           <div style="flex:1"></div>
           <button class="toolbar-btn" id="refreshCookiesBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px">
-              <polyline points="23 4 23 10 17 10"/>
-              <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
             </svg>
             Refresh
           </button>
           <button class="toolbar-btn" id="exportCookiesBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
             Export
           </button>
@@ -217,20 +226,23 @@
           <div style="flex:1"></div>
           <select class="toolbar-input" id="snippetSelect" style="min-width:150px">
             <option value="console.table(window.dataLayer);">Log dataLayer</option>
-            <option value="Object.keys(window.google_tag_manager || {}).filter(k => k.startsWith('GTM-'));">Get GTM Containers</option>
-            <option value="Object.keys(window.google_tag_manager || {}).filter(k => k.startsWith('G-'));">Get GA4 IDs</option>
+            <option value="Object.keys(window.google_tag_manager || {}).filter(k => k.startsWith('GTM-'));">Get GTM
+              Containers</option>
+            <option value="Object.keys(window.google_tag_manager || {}).filter(k => k.startsWith('G-'));">Get GA4 IDs
+            </option>
             <option value="document.cookie.split(';').map(c => c.trim());">List Cookies</option>
             <option value="(document.cookie.match(/_ga=([^;]+)/) || [])[1];">Get Client ID</option>
           </select>
           <button class="btn" id="runCodeBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px">
-              <polygon points="5 3 19 12 5 21 5 3"/>
+              <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
             Run
           </button>
         </div>
         <div class="code-editor-container">
-          <textarea class="code-editor" id="codeEditor" placeholder="Enter JavaScript code...">console.table(window.dataLayer);</textarea>
+          <textarea class="code-editor" id="codeEditor"
+            placeholder="Enter JavaScript code...">console.table(window.dataLayer);</textarea>
           <div class="code-output" id="codeOutput">
             <div style="color:var(--text-secondary);font-size:10px;margin-bottom:8px">Output:</div>
             <pre id="codeOutputContent">Click Run to execute code.</pre>
@@ -242,4 +254,5 @@
 
   <script src="panel.js"></script>
 </body>
+
 </html>

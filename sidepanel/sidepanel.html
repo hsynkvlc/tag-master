@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Swiss Knife for Google</title>
+  <title>Tag Master - Professional Audit Toolkit</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -13,13 +13,17 @@
     <!-- Header -->
     <header class="header">
       <div class="header-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="min-width:20px">
-          <path d="M14.5 2L4 12.5V18h5.5L20 7.5c.83-.83.83-2.17 0-3L17 1.5c-.83-.83-2.17-.83-3 0l-.5.5z" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          style="min-width:calc(20px * var(--font-scale)); color:var(--google-blue)">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+          <line x1="7" y1="7" x2="7.01" y2="7" />
         </svg>
         <div style="display:flex;flex-direction:column;line-height:1.1">
-          <span>Swiss Knife for Google</span>
-          <span style="font-size:9px;font-style:italic;color:var(--text-secondary);font-weight:400">One Extension to
-            Rule Them All</span>
+          <span style="font-size:calc(13px * var(--font-scale));font-weight:700">Tag <span
+              style="color:var(--google-blue)">Master</span></span>
+          <span
+            style="font-size:calc(9px * var(--font-scale));font-style:italic;color:var(--text-secondary);font-weight:400">Professional
+            GA4 & GTM Audit Toolkit</span>
         </div>
       </div>
       <div class="header-actions">
@@ -50,21 +54,7 @@
         </button>
       </div>
     </header>
-    <!-- Session Deep Dive Status Bar -->
-    <div id="sessionDeepDive" class="session-bar" style="display:none">
-      <div class="session-item" title="Measurement ID">
-        <span class="label">TID:</span>
-        <span id="deepTid" class="value">-</span>
-      </div>
-      <div class="session-item" title="Session ID">
-        <span class="label">SID:</span>
-        <span id="deepSid" class="value">-</span>
-      </div>
-      <div class="session-item" title="Client ID">
-        <span class="label">CID:</span>
-        <span id="deepCid" class="value">-</span>
-      </div>
-    </div>
+
 
     <!-- Tabs -->
     <div class="tabs">
@@ -137,6 +127,14 @@
         </svg>
         <span>Tools</span>
       </button>
+      <button class="tab" data-tab="about">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path
+            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+          </path>
+        </svg>
+        <span>Support</span>
+      </button>
     </div>
 
     <!-- Welcome Overlay -->
@@ -145,7 +143,8 @@
       <div
         style="background:var(--google-red);width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:24px;box-shadow:0 10px 30px rgba(234, 67, 53, 0.4);animation: pulse 2s infinite">
         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" style="width:34px;height:34px">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+          <line x1="7" y1="7" x2="7.01" y2="7" />
         </svg>
       </div>
       <h1 style="font-size:24px;font-weight:900;margin-bottom:12px;color:var(--text-primary);letter-spacing:-0.5px">One
@@ -167,8 +166,9 @@
           style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-surface);border-radius:16px;border:1px solid var(--border)">
           <div style="font-size:24px">👁️</div>
           <div>
-            <div style="font-size:12px;font-weight:800">The Eye of GA4</div>
-            <div style="font-size:10px;color:var(--text-muted)">See every hit, even the ones trying to hide.</div>
+            <div style="font-size:calc(12px * var(--font-scale));font-weight:800">Tracking Explorer Pro</div>
+            <div style="font-size:calc(10px * var(--font-scale));color:var(--text-muted)">Your premium companion for
+              digital analytics.</div>
           </div>
         </div>
         <div
@@ -196,7 +196,8 @@
         <div class="section">
           <div class="section-title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+              <line x1="7" y1="7" x2="7.01" y2="7" />
             </svg>
             GTM Environment Injector
           </div>
@@ -294,27 +295,7 @@
 
       <!-- Monitor Panel (DataLayer) -->
       <div class="panel" id="panel-monitor">
-        <!-- Event Timeline -->
-        <div class="section" id="timelineSection" style="display:none">
-          <div class="section-header">
-            <div class="section-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                style="width:16px;height:16px">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              Event Timeline
-            </div>
-            <button class="btn-icon" id="toggleTimeline" title="Toggle Timeline">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-          </div>
-          <div id="eventTimeline" class="event-timeline" style="padding:12px 0;overflow-x:auto">
-            <!-- Timeline visualization will be rendered here -->
-          </div>
-        </div>
+
 
         <div class="section">
           <div class="section-title"
@@ -329,13 +310,7 @@
               DataLayer Events
             </div>
             <div style="display:flex;gap:4px">
-              <button class="btn-icon" id="showTimeline" title="Show Timeline">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  style="width:14px;height:14px">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-              </button>
+
               <button class="btn-icon" id="exportJson" title="Export as JSON">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                   style="width:14px;height:14px">
@@ -515,38 +490,7 @@
 
       <!-- Consent Panel -->
       <div class="panel" id="panel-consent">
-        <div class="section">
-          <div class="section-header">
-            <div class="section-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                style="width:16px;height:16px">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              Consent Mode V2 Debugger
-            </div>
-            <button class="btn-icon" id="refreshConsent" title="Refresh Consent State">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-              </svg>
-            </button>
-          </div>
-          <div id="consentWarning"
-            style="display:none;margin-bottom:12px;padding:10px;background:rgba(234,67,53,0.1);border:1px solid var(--google-red);border-radius:6px;font-size:11px;color:var(--google-red)">
-            <strong>⚠️ Consent Mode V2 Issues:</strong> <br> ad_user_data or ad_personalization is missing.
-          </div>
-          <div class="container-list" id="consentList" style="display: grid; grid-template-columns: 1fr; gap: 8px;">
-            <div class="empty-state">
-              <p>Checking consent state...</p>
-            </div>
-          </div>
-        </div>
-        <div class="section">
-          <div class="section-title">Pro Tip</div>
-          <p style="font-size:11px;color:var(--text-secondary);line-height:1.5">
-            Google Consent Mode V2 requires <strong>ad_user_data</strong> and <strong>ad_personalization</strong> for
-            EEA users to maintain remarketing capabilities in Google Ads.
-          </p>
-        </div>
+
 
         <!-- CSP Checker Section -->
         <div class="section">
@@ -752,32 +696,12 @@
                 </button>
               </div>
 
-              <button class="btn btn-secondary" id="saveAsSnippet"
-                style="width:100%;gap:6px;background:rgba(14, 99, 156, 0.1);color:var(--accent-blue);border:1px dashed var(--accent-blue)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  style="width:14px;height:14px">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                  <polyline points="7 3 7 8 15 8"></polyline>
-                </svg>
-                Save as Snippet
-              </button>
+
             </div>
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-            </svg>
-            Snippets Library
-          </div>
-          <div class="container-list" id="snippetList">
-            <!-- Snippets will be added here -->
-          </div>
-        </div>
+
 
         <div class="section">
           <div class="section-title">
@@ -822,6 +746,38 @@
         </button>
       </div>
 
+      <!-- Settings Panel -->
+      <div class="panel" id="panel-settings">
+        <div class="section">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+            App Settings
+          </div>
+          <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:12px">
+            <div style="width:100%">
+              <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+                <span style="font-size:calc(12px * var(--font-scale));font-weight:600">Interface Scale</span>
+                <span id="fontSizeValue"
+                  style="font-size:calc(11px * var(--font-scale));color:var(--accent-blue);font-weight:600">Medium</span>
+              </div>
+              <div class="font-size-group" style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;width:100%">
+                <button class="btn btn-secondary btn-small font-size-btn" data-scale="0.85"
+                  data-label="Small">Small</button>
+                <button class="btn btn-secondary btn-small font-size-btn active" data-scale="1"
+                  data-label="Medium">Medium</button>
+                <button class="btn btn-secondary btn-small font-size-btn" data-scale="1.15"
+                  data-label="Large">Large</button>
+                <button class="btn btn-secondary btn-small font-size-btn" data-scale="1.3" data-label="XXL">XXL</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- About Panel -->
       <div class="panel" id="panel-about">
         <div class="section" style="text-align:center;padding:12px 10px">
@@ -829,10 +785,11 @@
             style="width:56px;height:56px;background:var(--bg-surface);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;border:1px solid var(--border);box-shadow:0 4px 12px rgba(0,0,0,0.1)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               style="width:28px;height:28px;color:var(--google-blue)">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+              <line x1="7" y1="7" x2="7.01" y2="7" />
             </svg>
           </div>
-          <h2 style="font-size:16px;margin-bottom:6px;color:var(--text-primary)">Swiss Knife for Google</h2>
+          <h2 style="font-size:16px;margin-bottom:6px;color:var(--text-primary)">Tag Master</h2>
           <p style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:20px">
             Professional toolkit for GTM Experts & Marketing Analysts.
           </p>
@@ -850,13 +807,38 @@
               </svg>
               Support the Project
             </div>
-            <p style="font-size:10.5px;color:var(--text-secondary);line-height:1.4;margin-bottom:12px">
-              Your support directly fuels new features and constant updates for this extension.
+            <p style="font-size:10.5px;color:var(--text-secondary);line-height:1.4;margin-bottom:16px">
+              Your support directly fuels new features and constant updates for Tag Master. Choose your preferred
+              method:
             </p>
-            <a href="https://www.buymeacoffee.com/yourprofile" target="_blank" class="btn"
-              style="background:#FFDD00;color:#000000;border:none;font-weight:700;width:100%;justify-content:center;gap:8px;text-decoration:none;padding:10px;font-size:12px;display:flex;align-items:center;border-radius:6px">
-              <span style="font-size:16px">☕</span> Buy me a coffee
-            </a>
+
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <!-- Buy Me a Coffee -->
+              <a href="https://www.buymeacoffee.com/huseyin" target="_blank" class="btn"
+                style="background:#FFDD00;color:#000000;border:none;font-weight:700;width:100%;justify-content:center;gap:8px;text-decoration:none;padding:12px;font-size:12px;display:flex;align-items:center;border-radius:8px">
+                <span style="font-size:16px">☕</span> Buy me a coffee
+              </a>
+
+              <!-- PayPal -->
+              <a href="https://paypal.me/huseyin" target="_blank" class="btn"
+                style="background:#003087;color:#ffffff;border:none;font-weight:700;width:100%;justify-content:center;gap:8px;text-decoration:none;padding:12px;font-size:12px;display:flex;align-items:center;border-radius:8px">
+                <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px">
+                  <path
+                    d="M20.067 6.347c.216 1.157.145 2.458-.216 3.829-1.25 4.749-5.12 7.151-9.96 7.151h-1.491c-.451 0-.812.338-.894.783l-.867 4.756c-.035.195-.203.342-.403.342H2.607c-.286 0-.498-.261-.439-.553l3.185-15.717c.078-.387.411-.664.8-.664h7.037c2.32 0 4.145.54 5.312 1.583 1.114.993 1.585 2.427 1.585 4.027z" />
+                </svg>
+                PayPal
+              </a>
+
+              <!-- Revolut -->
+              <a href="https://revolut.me/huseyin" target="_blank" class="btn"
+                style="background:#000000;color:#ffffff;border:none;font-weight:700;width:100%;justify-content:center;gap:8px;text-decoration:none;padding:12px;font-size:12px;display:flex;align-items:center;border-radius:8px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  style="width:16px;height:16px">
+                  <path d="M12 2v20M2 12h20" stroke-linecap="round" />
+                </svg>
+                Revolut
+              </a>
+            </div>
           </div>
 
           <!-- Developer Info -->
@@ -865,7 +847,7 @@
               style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--bg-surface);border-radius:8px;border:1px solid var(--border)">
               <div style="display:flex;align-items:center;gap:8px">
                 <div style="width:8px;height:8px;background:var(--success-green);border-radius:50%"></div>
-                <div style="font-size:11px;font-weight:600">v1.2.0 (Stable)</div>
+                <div style="font-size:calc(11px * var(--font-scale));font-weight:600">v1.2.0 (Stable)</div>
               </div>
               <a href="#" style="font-size:10px;color:var(--accent-blue);text-decoration:none">Changelog</a>
             </div>

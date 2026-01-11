@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - Constants
+ * Tag Master - Constants
  * Phase 1: Google Products Only
  */
 

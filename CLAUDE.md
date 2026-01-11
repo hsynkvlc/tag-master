@@ -1,4 +1,4 @@
-# Swiss Knife for Google - Project Guide
+# Tag Master - Project Guide
 
 ## Overview
 Professional Chrome extension for debugging Google Marketing Stack (GTM, GA4, Google Ads, Enhanced Conversions, Floodlight, Consent Mode V2).

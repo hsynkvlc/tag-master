@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Swiss Knife for Google",
-  "version": "1.0.0",
-  "description": "Professional debugging tool for Google Marketing Stack - GTM, GA4, Google Ads, Enhanced Conversions",
+  "name": "Tag Master",
+  "version": "1.2.0",
+  "description": "Professional GA4 & GTM Audit Toolkit - Deep Debugging for Google Marketing Stack",
   "author": "hsynkvlc",
   "permissions": [
     "storage",
@@ -57,7 +57,7 @@
       "48": "assets/icons/icon48.png",
       "128": "assets/icons/icon128.png"
     },
-    "default_title": "Swiss Knife for Google"
+    "default_title": "Tag Master"
   },
   "icons": {
     "16": "assets/icons/icon16.png",

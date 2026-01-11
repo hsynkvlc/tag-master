@@ -1,5 +1,5 @@
 /**
- * Swiss Knife - Full Extension Test Suite
+ * Tag Master - Full Extension Test Suite
  */
 const { chromium } = require('playwright');
 const path = require('path');

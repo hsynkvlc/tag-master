@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - Side Panel (Vanilla JS)
+ * Tag Master - Side Panel (Vanilla JS)
  */
 
 // ============================================
@@ -250,6 +250,7 @@ let events = [];
 let networkRequests = [];
 let expandedNetworkItems = new Set();
 let currentTab = 'gtm';
+let previousTab = 'gtm';
 
 // ============================================
 // DOM Elements
@@ -284,19 +285,16 @@ const elements = {
   pushBtn: document.getElementById('pushBtn'),
   currentUrl: document.getElementById('currentUrl'),
   toast: document.getElementById('toast'),
-  // Session Deep Dive
-  sessionBar: document.getElementById('sessionDeepDive'),
-  deepTid: document.getElementById('deepTid'),
-  deepSid: document.getElementById('deepSid'),
-  deepCid: document.getElementById('deepCid'),
+  // Settings
+  openSettings: document.getElementById('openSettings'),
+  fontSizeValue: document.getElementById('fontSizeValue'),
+  fontSizeButtons: document.querySelectorAll('.font-size-btn'),
   // Export
   exportJson: document.getElementById('exportJson'),
   exportCsv: document.getElementById('exportCsv'),
   // Audit
   runAudit: document.getElementById('runAudit'),
   auditResults: document.getElementById('auditResults'),
-  // Snippets
-  snippetList: document.getElementById('snippetList'),
   // Element Picker
   pickElementBtn: document.getElementById('pickElementBtn'),
   captureHighlightBtn: document.getElementById('captureHighlightBtn'),
@@ -309,16 +307,13 @@ const elements = {
   testResultValue: document.getElementById('testResultValue'),
   pickedJsVar: document.getElementById('pickedJsVar'),
   copyJsVar: document.getElementById('copyJsVar'),
-  saveAsSnippet: document.getElementById('saveAsSnippet'),
   triggerSuggestions: document.getElementById('triggerSuggestions'),
   triggerList: document.getElementById('triggerList'),
   // Cookies
   refreshCookies: document.getElementById('refreshCookies'),
   cookieList: document.getElementById('cookieList'),
   // Consent
-  refreshConsent: document.getElementById('refreshConsent'),
-  consentList: document.getElementById('consentList'),
-  consentWarning: document.getElementById('consentWarning'),
+
   // CSP
   refreshCSP: document.getElementById('refreshCSP'),
   cspResults: document.getElementById('cspResults'),
@@ -332,11 +327,8 @@ const elements = {
   // Welcome
   welcomeOverlay: document.getElementById('welcomeOverlay'),
   getStartedBtn: document.getElementById('getStartedBtn'),
-  // Timeline
-  timelineSection: document.getElementById('timelineSection'),
-  eventTimeline: document.getElementById('eventTimeline'),
-  showTimeline: document.getElementById('showTimeline'),
-  toggleTimeline: document.getElementById('toggleTimeline'),
+
+
   // HAR Export
   exportHar: document.getElementById('exportHar')
 };
@@ -367,6 +359,75 @@ if (elements.themeToggle) {
     await chrome.storage.local.set({ theme: newTheme });
     showToast(`${newTheme.charAt(0).toUpperCase() + newTheme.slice(1)} mode active`);
   });
+}
+
+// Settings Action
+if (elements.openSettings) {
+  elements.openSettings.addEventListener('click', () => {
+    const settingsPanel = document.getElementById('panel-settings');
+    const isSettingsOpen = settingsPanel.classList.contains('active');
+
+    if (isSettingsOpen) {
+      // Close settings and return to previous tab
+      const allPanels = document.querySelectorAll('.panel');
+      allPanels.forEach(p => p.classList.remove('active'));
+      elements.tabs.forEach(t => t.classList.remove('active'));
+
+      const targetTab = previousTab === 'settings' ? 'gtm' : previousTab;
+      document.getElementById(`panel-${targetTab}`).classList.add('active');
+      const tabBtn = Array.from(elements.tabs).find(t => t.dataset.tab === targetTab);
+      if (tabBtn) tabBtn.classList.add('active');
+      currentTab = targetTab;
+      showToast('Settings closed', 'info');
+    } else {
+      // Open settings
+      previousTab = currentTab;
+      const allPanels = document.querySelectorAll('.panel');
+      allPanels.forEach(p => p.classList.remove('active'));
+      elements.tabs.forEach(t => t.classList.remove('active'));
+
+      if (settingsPanel) {
+        settingsPanel.classList.add('active');
+        currentTab = 'settings';
+        showToast('Settings opened', 'info');
+      }
+    }
+  });
+}
+
+// Font Size Control
+if (elements.fontSizeButtons) {
+  elements.fontSizeButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const scale = btn.dataset.scale;
+      const label = btn.dataset.label;
+
+      applyFontScale(scale, label);
+
+      await chrome.storage.local.set({ fontScale: scale, fontLabel: label });
+      showToast(`Scale set to ${label}`, 'info');
+    });
+  });
+}
+
+function applyFontScale(scale, label) {
+  document.documentElement.style.setProperty('--font-scale', scale);
+
+  // Update active state
+  elements.fontSizeButtons.forEach(b => {
+    b.classList.toggle('active', b.dataset.scale === scale);
+  });
+
+  if (elements.fontSizeValue) {
+    elements.fontSizeValue.textContent = label;
+  }
+}
+
+async function loadSettings() {
+  const stored = await chrome.storage.local.get(['fontScale', 'fontLabel', 'theme']);
+  if (stored.fontScale) {
+    applyFontScale(stored.fontScale, stored.fontLabel || 'Medium');
+  }
 }
 
 // ... (Utility Functions) ...
@@ -483,12 +544,13 @@ elements.tabs.forEach(tab => {
 
     tab.classList.add('active');
     document.getElementById(`panel-${tabName}`).classList.add('active');
+    previousTab = currentTab;
     currentTab = tabName;
 
     if (tabName === 'network') renderNetworkRequests();
-    if (tabName === 'consent') loadConsentState();
+    if (tabName === 'consent') checkCSP();
     if (tabName === 'cookies') refreshCookies();
-    if (tabName === 'push') renderSnippets();
+    if (tabName === 'push') { /* Tools panel active */ }
     if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
     if (tabName === 'tech') detectTechnologies();
     if (tabName === 'about') verifyElements();
@@ -662,234 +724,7 @@ async function detectContainers(isRetry = false) {
 // ============================================
 // Consent Management
 // ============================================
-async function loadConsentState() {
-  console.log('[Swiss Knife] loadConsentState triggered');
 
-  // Show loading
-  elements.consentList.innerHTML = `
-    <div class="empty-state">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin-animation">
-        <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-      </svg>
-      <p>Checking consent state...</p>
-    </div>
-  `;
-
-  try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout')), 3000)
-    );
-
-    const messagePromise = chrome.runtime.sendMessage({ type: 'CONSENT_GET' });
-    const response = await Promise.race([messagePromise, timeoutPromise]) || {};
-
-    console.log('[Swiss Knife] Consent Response (Live):', response);
-
-    // Merge logic: Live Priority > Network Fallback
-    let finalState = { ...response };
-    const latestNetworkState = extractConsentFromNetwork();
-
-    if (latestNetworkState) {
-      Object.keys(latestNetworkState).forEach(key => {
-        // Only override if live value is 'unknown' or missing
-        if (!finalState[key] || finalState[key] === 'unknown') {
-          finalState[key] = latestNetworkState[key];
-          finalState._isFromNetwork = true;
-        }
-      });
-    }
-
-    const hasKeys = finalState && (finalState.ad_storage || finalState.analytics_storage);
-
-    if (hasKeys && !finalState.error) {
-      renderConsentState(finalState);
-    } else {
-      elements.consentList.innerHTML = `
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          </svg>
-          <p>Consent Mode not detected in page memory.</p>
-          <p style="font-size:10px;color:var(--text-muted);margin-top:4px">Checking Network requests for signals...</p>
-          <button class="btn btn-secondary btn-small" id="retryConsent" style="margin-top:8px">Scan Again</button>
-        </div>
-      `;
-      document.getElementById('retryConsent')?.addEventListener('click', loadConsentState);
-    }
-  } catch (e) {
-    console.error('[Swiss Knife] Consent fetch error:', e);
-    const lastResort = extractConsentFromNetwork();
-    if (lastResort) {
-      renderConsentState({ ...lastResort, _isFromNetwork: true });
-    } else {
-      elements.consentList.innerHTML = `
-        <div class="empty-state">
-          <p>No consent data found.</p>
-          <button class="btn btn-secondary btn-small" id="retryConsent" style="margin-top:8px">Retry</button>
-        </div>
-      `;
-      document.getElementById('retryConsent')?.addEventListener('click', loadConsentState);
-    }
-  }
-}
-
-/**
- * Extract consent state from a given list of network requests
- * Standardized with Network Tab's decoding logic
- */
-function extractConsentFromNetwork(requests = networkRequests) {
-  if (!requests || requests.length === 0) return null;
-
-  // Find latest hit with gcs or gcd - focus on analytics or google-analytics.com hits
-  const latestWithConsent = [...requests].reverse().find(req => {
-    return (req.url.includes('google-analytics.com') || req.url.includes('analytics.google.com')) &&
-      (req.url.includes('gcs=') || req.url.includes('gcd='));
-  });
-
-  if (!latestWithConsent) return null;
-
-  try {
-    const url = new URL(latestWithConsent.url);
-    const gcs = url.searchParams.get('gcs');
-    const gcd = url.searchParams.get('gcd');
-    const result = {};
-
-    // GCS Mapping: G1<ad><analytics> (1=granted, 0=denied)
-    if (gcs && gcs.length >= 4) {
-      result.ad_storage = gcs.charAt(2) === '1' ? 'granted' : (gcs.charAt(2) === '0' ? 'denied' : 'unknown');
-      result.analytics_storage = gcs.charAt(3) === '1' ? 'granted' : (gcs.charAt(3) === '0' ? 'denied' : 'unknown');
-    }
-
-    // GCD Mapping: 1<ad><analytics><user_data><personalization>...
-    if (gcd && gcd.length >= 10) {
-      const charToStatus = {
-        'r': 'granted', 'v': 'granted', 't': 'granted',
-        'p': 'denied', 'q': 'denied', 'u': 'denied',
-        'l': 'unknown', 'm': 'unknown', 'n': 'unknown'
-      };
-
-      const ad = charToStatus[gcd.charAt(2)];
-      const analytics = charToStatus[gcd.charAt(4)];
-      const userData = charToStatus[gcd.charAt(6)];
-      const personalization = charToStatus[gcd.charAt(8)];
-
-      if (ad) result.ad_storage = ad;
-      if (analytics) result.analytics_storage = analytics;
-      if (userData) result.ad_user_data = userData;
-      if (personalization) result.ad_personalization = personalization;
-    }
-
-    // Only return if we found actual granted/denied values
-    const hasValues = Object.values(result).some(v => v === 'granted' || v === 'denied');
-    return hasValues ? result : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-function renderConsentState(state) {
-  console.log('[Swiss Knife] Rendering consent state:', state);
-
-  // Validate state
-  if (!state || typeof state !== 'object' || state.error) {
-    console.warn('[Swiss Knife] Invalid consent state:', state);
-    elements.consentList.innerHTML = `
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        </svg>
-        <p>No consent data available</p>
-        <p style="font-size:10px;color:var(--text-muted);margin-top:4px">${state?.error || 'Consent Mode not detected'}</p>
-      </div>
-    `;
-    return;
-  }
-
-  // Sort keys to ensure consistent order: storage first, then user_data/personalization
-  const orderedKeys = [
-    'ad_storage',
-    'analytics_storage',
-    'ad_user_data',
-    'ad_personalization',
-    'functionality_storage',
-    'personalization_storage',
-    'security_storage'
-  ];
-
-  // Extract metadata
-  const metadata = state._metadata || {};
-  const isFromNetwork = state._isFromNetwork;
-
-  // Merge with any other keys that might exist (excluding metadata and internal flags)
-  const allKeys = Array.from(new Set([...orderedKeys, ...Object.keys(state)]))
-    .filter(k => k !== '_metadata' && k !== '_isFromNetwork' && k !== 'error');
-
-  const isV2Ready = state.ad_user_data && state.ad_user_data !== 'unknown' &&
-    state.ad_personalization && state.ad_personalization !== 'unknown';
-
-  // Source Info
-  const sourceInfo = isFromNetwork ? `
-    <div style="margin: -4px 0 12px 0; display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--accent-blue);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      <span>Source: Decoded from Network Hits (Most Reliable)</span>
-    </div>
-  ` : `
-    <div style="margin: -4px 0 12px 0; display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--success-green);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-      <span>Source: Live Page State (Internal Memory)</span>
-    </div>
-  `;
-
-  // Show blocking mode warning
-  let blockingWarning = '';
-  if (metadata.isBlocking) {
-    blockingWarning = `
-      <div style="margin-bottom:12px;padding:10px;background:rgba(251,188,4,0.1);border:1px solid var(--warning-yellow);border-radius:6px;font-size:11px;color:var(--text-primary)">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning-yellow)" stroke-width="2" style="width:14px;height:14px">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-            <line x1="12" y1="9" x2="12" y2="13"></line>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          <strong style="color:var(--warning-yellow)">⏳ Blocking Mode Active</strong>
-        </div>
-        <div style="font-size:10px;line-height:1.4">
-          Google tags (GTM, GA4, Ads) are currently <strong>blocked</strong> and waiting for user consent. 
-          Cookies like <code>_ga</code>, <code>_gid</code>, <code>_gcl</code> will not be set until consent is granted.
-        </div>
-      </div>
-    `;
-  }
-
-  if (elements.consentWarning) {
-    elements.consentWarning.style.display = isV2Ready ? 'none' : 'block';
-  }
-
-  elements.consentList.innerHTML = sourceInfo + blockingWarning + allKeys.map(key => {
-    // Only render if key exists in state
-    if (!(key in state)) return '';
-
-    const value = state[key];
-    const isGranted = value === 'granted';
-    const isUnknown = value === 'unknown';
-
-    // Format key: ad_storage -> AD STORAGE
-    const label = key.replace(/_/g, ' ').toUpperCase();
-
-    return `
-      <div class="container-item" style="display:flex;flex-direction:column;padding:12px;gap:6px;align-items:flex-start">
-        <div style="font-size:10px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">${label}</div>
-        <div style="font-size:13px;font-weight:700;color:${isUnknown ? 'var(--text-muted)' : (isGranted ? 'var(--success-green)' : 'var(--error-red)')};text-transform:uppercase">
-          ${value}
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-if (elements.refreshConsent) {
-  elements.refreshConsent.addEventListener('click', loadConsentState);
-}
 
 // ============================================
 // CSP Compatibility Checker
@@ -1851,32 +1686,27 @@ elements.jsonEditor.value = JSON.stringify(processTemplate(PRESETS.page_view), n
 // Message Listener
 // ============================================
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === MESSAGE_TYPES.DATALAYER_PUSH) {
+  if (message.type === 'SHOW_TOAST') {
+    showToast(message.message, message.level || 'info');
+  } else if (message.type === MESSAGE_TYPES.DATALAYER_PUSH) {
     events.push(message.data);
     renderEvents();
     // Check real-time alerts
     checkAlertRules(message.data);
-    // Update timeline if visible
-    if (elements.timelineSection?.style.display !== 'none') {
-      renderEventTimeline();
-    }
+
+
   } else if (message.type === 'NETWORK_REQUEST') {
     networkRequests.push(message.data);
     if (currentTab === 'network') {
       renderNetworkRequests();
     } else if (currentTab === 'consent') {
-      // If we receive a network request with consent signals while on the consent tab, auto-refresh
-      if (message.data.url.includes('gcs=') || message.data.url.includes('gcd=')) {
-        loadConsentState();
-      }
+      // Auto-refresh CSP if needed or nothing
     }
-  } else if (message.type === 'GA4_SESSION_UPDATE') {
-    updateSessionDeepDive(message.data);
+
   } else if (message.type === MESSAGE_TYPES.TAB_UPDATED) {
     updateCurrentUrl(message.data.url);
     checkActiveInjection();
     detectContainers();
-    resetSessionDeepDive();
     if (currentTab === 'cookies') refreshCookies();
   } else if (message.type === 'SELECTOR_RESULT') {
     verifyElements();
@@ -1997,33 +1827,11 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 
-if (elements.saveAsSnippet) {
-  elements.saveAsSnippet.addEventListener('click', async () => {
-    const code = elements.pickedJsVar.textContent;
-    const name = prompt('Enter a name for this snippet:', 'GTM Var: ' + (elements.pickedSelector.textContent.substring(0, 20)));
 
-    if (name && code) {
-      const newSnippet = {
-        id: 'custom_' + Date.now(),
-        name: name,
-        code: code,
-        isCustom: true
-      };
-
-      const stored = await chrome.storage.local.get('custom_snippets');
-      const snippets = stored.custom_snippets || [];
-      snippets.push(newSnippet);
-      await chrome.storage.local.set({ 'custom_snippets': snippets });
-
-      showToast('Snippet saved to library!', 'success');
-      if (currentTab === 'push') renderSnippets();
-    }
-  });
-}
 
 if (elements.runJsTest) {
   elements.runJsTest.addEventListener('click', async () => {
-    const codeSnippet = elements.pickedJsTest.textContent;
+    const testCode = elements.pickedJsTest.textContent;
     // Extract the internal function or execute the whole block
     // Since it's console.log((function(){...})()), we'll execute it and capture the return
     try {
@@ -2031,7 +1839,7 @@ if (elements.runJsTest) {
 
       const response = await chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.CODE_EXECUTE,
-        code: codeSnippet
+        code: testCode
       });
 
       elements.runJsTest.querySelector('svg').classList.remove('spin-animation');
@@ -2052,20 +1860,7 @@ if (elements.runJsTest) {
   });
 }
 
-function updateSessionDeepDive(data) {
-  if (!data) return;
-  elements.sessionBar.style.display = 'flex';
-  if (data.tid) elements.deepTid.textContent = data.tid;
-  if (data.sid) elements.deepSid.textContent = data.sid;
-  if (data.cid) elements.deepCid.textContent = data.cid;
-}
 
-function resetSessionDeepDive() {
-  elements.sessionBar.style.display = 'none';
-  elements.deepTid.textContent = '-';
-  elements.deepSid.textContent = '-';
-  elements.deepCid.textContent = '-';
-}
 
 // ============================================
 // Export Functions
@@ -2136,7 +1931,7 @@ function exportAsHAR() {
     log: {
       version: '1.2',
       creator: {
-        name: 'Swiss Knife for Google',
+        name: 'Tag Master',
         version: '1.2.0'
       },
       browser: {
@@ -2286,104 +2081,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ============================================
-// Event Timeline
-// ============================================
-function renderEventTimeline() {
-  if (!elements.eventTimeline || events.length === 0) return;
 
-  // Group events by type and show on timeline
-  const eventColors = {
-    page_view: '#4285F4',      // Blue
-    purchase: '#34A853',       // Green
-    add_to_cart: '#FBBC04',    // Yellow
-    begin_checkout: '#EA4335', // Red
-    view_item: '#9C27B0',      // Purple
-    view_item_list: '#00BCD4', // Cyan
-    login: '#FF5722',          // Orange
-    sign_up: '#8BC34A',        // Light Green
-    default: '#9E9E9E'         // Grey
-  };
-
-  const firstTimestamp = events[0]?.timestamp || Date.now();
-  const lastTimestamp = events[events.length - 1]?.timestamp || Date.now();
-  const timeRange = Math.max(lastTimestamp - firstTimestamp, 1000); // Min 1 second
-
-  const timelineHtml = `
-      < div style = "position:relative;height:60px;background:var(--bg-secondary);border-radius:8px;padding:8px 12px;min-width:${Math.max(300, events.length * 40)}px" >
-      < !--Timeline axis-- >
-      <div style="position:absolute;bottom:20px;left:12px;right:12px;height:2px;background:var(--border)"></div>
-
-      <!--Time markers-- >
-      <div style="position:absolute;bottom:8px;left:12px;font-size:9px;color:var(--text-muted)">${formatTimestamp(firstTimestamp)}</div>
-      <div style="position:absolute;bottom:8px;right:12px;font-size:9px;color:var(--text-muted)">${formatTimestamp(lastTimestamp)}</div>
-
-      <!--Event markers-- >
-      ${events.slice(-30).map((event, idx) => {
-    const data = event.data?.data || event.data || event;
-    const eventName = data?.event || 'push';
-    const color = eventColors[eventName] || eventColors.default;
-    const position = ((event.timestamp - firstTimestamp) / timeRange) * 100;
-    const validation = validateGA4Event(data);
-    const hasError = validation.errors.length > 0;
-
-    return `
-          <div class="timeline-marker"
-               style="position:absolute;bottom:16px;left:calc(12px + ${Math.min(position, 95)}%);transform:translateX(-50%);cursor:pointer"
-               title="${eventName} @ ${formatTimestamp(event.timestamp)}${hasError ? ' (has errors)' : ''}"
-               data-event-id="${event.id}">
-            <div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid ${hasError ? 'var(--error-red)' : 'var(--bg-primary)'};box-shadow:0 2px 4px rgba(0,0,0,0.2)"></div>
-            <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--text-secondary);white-space:nowrap;max-width:60px;overflow:hidden;text-overflow:ellipsis">${eventName}</div>
-          </div>
-        `;
-  }).join('')
-    }
-    </div >
-
-    < !--Legend-->
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:9px">
-        ${Object.entries(eventColors).filter(([k]) => k !== 'default').slice(0, 6).map(([name, color]) => `
-        <div style="display:flex;align-items:center;gap:4px">
-          <div style="width:8px;height:8px;border-radius:50%;background:${color}"></div>
-          <span style="color:var(--text-muted)">${name}</span>
-        </div>
-      `).join('')}
-      </div>
-    `;
-
-  elements.eventTimeline.innerHTML = timelineHtml;
-
-  // Add click handlers for timeline markers
-  elements.eventTimeline.querySelectorAll('.timeline-marker').forEach(marker => {
-    marker.addEventListener('click', () => {
-      const eventId = marker.dataset.eventId;
-      const eventEl = document.querySelector(`.event - item[data - id="${eventId}"]`);
-      if (eventEl) {
-        eventEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        eventEl.style.boxShadow = '0 0 0 2px var(--accent-blue)';
-        setTimeout(() => eventEl.style.boxShadow = '', 2000);
-      }
-    });
-  });
-}
-
-// Timeline toggle handlers
-if (elements.showTimeline) {
-  elements.showTimeline.addEventListener('click', () => {
-    if (elements.timelineSection) {
-      elements.timelineSection.style.display = 'block';
-      renderEventTimeline();
-    }
-  });
-}
-
-if (elements.toggleTimeline) {
-  elements.toggleTimeline.addEventListener('click', () => {
-    if (elements.timelineSection) {
-      elements.timelineSection.style.display = 'none';
-    }
-  });
-}
 
 // HAR Export button handler
 if (elements.exportHar) {
@@ -2723,7 +2421,7 @@ document.head.appendChild(alertStyles);
 // Tab Handling
 // ============================================
 async function handleTabChange(tabId) {
-  console.log('[Swiss Knife] Tab Changed:', tabId);
+  console.log('[Tag Master] Tab Changed:', tabId);
 
   // 1. Clear Local State
   events = [];
@@ -2809,17 +2507,7 @@ async function getCurrentTab() {
 // ============================================
 let consentState = null;
 
-async function loadConsentState() {
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'CONSENT_GET' });
-    if (response && !response.error) {
-      consentState = response;
-      renderConsentState();
-    }
-  } catch (e) {
-    // console.error(e);
-  }
-}
+
 
 
 
@@ -2960,11 +2648,7 @@ async function runAudit() {
     checks.push({ status: 'success', title: 'GA4 Active', desc: 'GA4 data collection hits detected.' });
   }
 
-  // 5. Martech Audit (Meta, TikTok, LinkedIn)
-  const metaHit = networkRequests.find(r => r.type === 'META_PIXEL');
-  if (metaHit) checks.push({ status: 'success', title: 'Meta Pixel', desc: 'Meta tracking detected.' });
-  else checks.push({ status: 'warning', title: 'Meta Pixel Missing', desc: 'No Meta Pixel hits found.' });
-
+  // 5. Martech Audit (TikTok, LinkedIn)
   const ttHit = networkRequests.find(r => r.type === 'TIKTOK_PIXEL');
   if (ttHit) checks.push({ status: 'success', title: 'TikTok Pixel', desc: 'TikTok tracking detected.' });
 
@@ -3132,94 +2816,14 @@ if (deleteTestGclAwBtn) {
   });
 }
 
-// ============================================
-// Professional Features: Snippets
-// ============================================
-const SNIPPETS = [
-  { id: 'dl_size', name: 'Check DataLayer Size', code: 'const dlLength = window.dataLayer ? window.dataLayer.length : 0; window.postMessage({ source: "SWISS_KNIFE_SNIPPET", type: "SHOW_TOAST", message: "DataLayer length: " + dlLength, level: "info" }, "*");' },
-  { id: 'ec_check', name: 'Log eCommerce items', code: 'console.table(window.dataLayer.filter(e => e.ecommerce && e.ecommerce.items).map(e => e.ecommerce.items).flat())' },
-  { id: 'clear_ga4', name: 'Clear GA4 SessionStorage', code: 'Object.keys(sessionStorage).filter(k => k.startsWith("_ga")).forEach(k => sessionStorage.removeItem(k)); alert("GA4 Session Storage Cleared")' },
-  { id: 'find_gtm', name: 'Find GTM Containers', code: 'const ids = Object.keys(window.google_tag_manager || {}).filter(k => k.startsWith("GTM-")); alert("GTM IDs found: " + (ids.join(", ") || "None"));' },
-  { id: 'get_ga4_ids', name: 'Get GA4 Client & Session IDs', code: 'const cid = (document.cookie.match(/_ga=([^;]+)/) || [])[1]; const sid = (document.cookie.match(/_ga_[^=]+=GS1\\.1\\.([^.]+)/) || [])[1]; alert("Client ID: " + (cid || "Not found") + "\\nSession ID: " + (sid || "Not found"));' },
-  { id: 'dl_search', name: 'Search DataLayer (Key)', code: 'const key = prompt("Enter key to search:"); if(key && window.dataLayer){ const results = window.dataLayer.filter(e => e[key] !== undefined); console.log("Search results for " + key + ":", results); alert("Found " + results.length + " events with key: " + key); }' },
-  { id: 'list_cookies', name: 'List All Marketing Cookies', code: 'const target = ["_ga", "_gid", "_gcl_aw", "_fbp", "_uetsid"]; const found = document.cookie.split(";").map(c => c.trim()).filter(c => target.some(t => c.startsWith(t))); console.log("Marketing Cookies:", found); alert("Found " + found.length + " marketing cookies. Check console for details.");' }
-];
 
-async function renderSnippets() {
-  if (!elements.snippetList) return;
-
-  const stored = await chrome.storage.local.get('custom_snippets');
-  const customSnippets = stored.custom_snippets || [];
-  const allSnippets = [...SNIPPETS, ...customSnippets];
-
-  elements.snippetList.innerHTML = allSnippets.map(s => `
-    <div class="container-item" style="cursor:pointer" data-id="${s.id}">
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:12px;display:flex;align-items:center;gap:6px">
-          ${s.isCustom ? '<span style="color:var(--accent-blue)">★</span>' : ''}
-          ${s.name}
-        </div>
-        <div style="font-size:10px;color:var(--text-muted)">Click to execute in page</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        ${s.isCustom ? `
-          <button class="btn-icon btn-small delete-snippet" data-id="${s.id}" title="Delete Snippet">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;color:var(--error-red)"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          </button>
-        ` : ''}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--accent-blue)"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      </div>
-    </div>
-  `).join('');
-
-  // Handle execute
-  elements.snippetList.querySelectorAll('.container-item').forEach(item => {
-    item.addEventListener('click', async (e) => {
-      if (e.target.closest('.delete-snippet')) return;
-
-      const snippet = allSnippets.find(s => s.id === item.dataset.id);
-      if (snippet) {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab) {
-          chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            world: 'MAIN',
-            func: (code) => {
-              try {
-                new Function(code)();
-              } catch (e) { console.error('Snippet execution failed', e); }
-            },
-            args: [snippet.code]
-          });
-          showToast(`Executing: ${snippet.name} `);
-        }
-      }
-    });
-  });
-
-  // Handle delete
-  elements.snippetList.querySelectorAll('.delete-snippet').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      const stored = await chrome.storage.local.get('custom_snippets');
-      const snippets = (stored.custom_snippets || []).filter(s => s.id !== id);
-      await chrome.storage.local.set({ 'custom_snippets': snippets });
-      renderSnippets();
-      showToast('Snippet deleted');
-    });
-  });
-}
 
 
 
 // Update tab navigation to trigger renders
 // GA4 Session Info Update Logic
 
-async function loadSessionInfo() {
-  const info = await chrome.runtime.sendMessage({ type: 'GA4_SESSION_GET' });
-  if (info) updateSessionDeepDive(info);
-}
+
 
 async function checkWelcome() {
   const stored = await chrome.storage.local.get('welcome_dismissed');
@@ -3254,21 +2858,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   checkActiveInjection();
   loadEvents();
   loadNetworkRequests();
-  loadConsentState();
   checkBlockGA4State();
   getCurrentTab();
-  loadSessionInfo();
+  loadSettings();
   // Load saved filters and render chips
   await loadSavedFilters();
   renderFilterChips();
 });
 
-// ============================================
-// Listen for messages from snippets
-// ============================================
-window.addEventListener('message', (event) => {
-  // Only accept messages from our own extension's snippets
-  if (event.data && event.data.source === 'SWISS_KNIFE_SNIPPET' && event.data.type === 'SHOW_TOAST') {
-    showToast(event.data.message, event.data.level || 'info');
-  }
-});
+

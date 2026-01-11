@@ -69,9 +69,9 @@ Create atmosphere and depth rather than defaulting to solid colors. Add contextu
 
 ---
 
-## Swiss Knife Extension Context
+## Tag Master Extension Context
 
-When applying this skill to the Swiss Knife for Google extension:
+When applying this skill to the Tag Master extension:
 
 ### Current Design Language
 - Dark theme primary (#1e1e1e, #252526)

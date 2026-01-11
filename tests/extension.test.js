@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - Extension Tests
+ * Tag Master - Extension Tests
  * Run with: npx playwright test tests/extension.test.js
  */
 
@@ -9,7 +9,7 @@ const path = require('path');
 const EXTENSION_PATH = path.join(__dirname, '..');
 
 async function runTests() {
-  console.log('🚀 Starting Swiss Knife Extension Tests...\n');
+  console.log('🚀 Starting Tag Master Extension Tests...\n');
 
   // Launch browser with extension
   const context = await chromium.launchPersistentContext('', {

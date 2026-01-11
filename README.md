@@ -1,8 +1,8 @@
-# 🛠️ Swiss Knife for Google
+# 🛠️ Tag Master
 
 **Professional toolkit for GTM Experts, Marketing Analysts, and Web Developers.**
 
-Swiss Knife for Google is a powerful Chrome Extension designed to streamline the implementation, debugging, and auditing of Google Tag Manager (GTM) and Google Analytics 4 (GA4).
+Tag Master is a powerful Chrome Extension designed to streamline the implementation, debugging, and auditing of Google Tag Manager (GTM) and Google Analytics 4 (GA4).
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.2.0-green.svg)

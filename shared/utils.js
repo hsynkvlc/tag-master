@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - Utility Functions
+ * Tag Master - Utility Functions
  */
 
 import {

@@ -1,5 +1,5 @@
 /**
- * Swiss Knife for Google - Content Script
+ * Tag Master - Content Script
  * Handles: DataLayer monitoring, GTM injection, code execution
  */
 
@@ -72,7 +72,7 @@
       // Timeout fallback
       setTimeout(() => {
         if (pendingCallbacks[requestId]) {
-          console.warn('[Swiss Knife] Command timed out:', type);
+          console.warn('[Tag Master] Command timed out:', type);
           pendingCallbacks[requestId](null);
           delete pendingCallbacks[requestId];
         }
@@ -115,7 +115,7 @@
         return await sendCommand('GET_DATALAYER');
 
       case MESSAGE_TYPES.DATALAYER_PUSH:
-        console.log('[Swiss Knife] Pushing to DataLayer:', message.data);
+        console.log('[Tag Master] Pushing to DataLayer:', message.data);
         return await sendCommand('PUSH_DATALAYER', {
           data: message.data
         });
@@ -166,7 +166,7 @@
       const config = stored[key];
 
       if (config) {
-        console.log('[Swiss Knife] Auto-injecting GTM:', config.gtmId);
+        console.log('[Tag Master] Auto-injecting GTM:', config.gtmId);
         // Add small delay to ensure page script is ready
         setTimeout(async () => {
           await sendCommand('INJECT_GTM', {
@@ -176,12 +176,12 @@
         }, 500);
       }
     } catch (e) {
-      console.error('[Swiss Knife] Auto-inject error:', e);
+      console.error('[Tag Master] Auto-inject error:', e);
     }
   }
 
   checkAutoInject();
 
-  console.log('[Swiss Knife] Content script initialized');
+  console.log('[Tag Master] Content script initialized');
 
 })();
