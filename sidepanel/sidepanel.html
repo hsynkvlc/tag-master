@@ -105,6 +105,12 @@
         </svg>
         <span>Cookies</span>
       </button>
+      <button class="tab" data-tab="consent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        <span>Consent</span>
+      </button>
       <button class="tab" data-tab="push">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="22" y1="2" x2="11" y2="13" />
@@ -343,6 +349,42 @@
           <div id="cookieList" class="container-list">
             <!-- Cookies will be added here -->
           </div>
+        </div>
+      </div>
+
+      <!-- Consent Panel -->
+      <div class="panel" id="panel-consent">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              Consent Mode V2 Debugger
+            </div>
+            <button class="btn-icon" id="refreshConsent" title="Refresh Consent State">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+          </div>
+          <div id="consentWarning"
+            style="display:none;margin-bottom:12px;padding:10px;background:rgba(234,67,53,0.1);border:1px solid var(--google-red);border-radius:6px;font-size:11px;color:var(--google-red)">
+            <strong>⚠️ Consent Mode V2 Issues:</strong> <br> ad_user_data or ad_personalization is missing.
+          </div>
+          <div class="container-list" id="consentList">
+            <div class="empty-state">
+              <p>Checking consent state...</p>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">Pro Tip</div>
+          <p style="font-size:11px;color:var(--text-secondary);line-height:1.5">
+            Google Consent Mode V2 requires <strong>ad_user_data</strong> and <strong>ad_personalization</strong> for
+            EEA users to maintain remarketing capabilities in Google Ads.
+          </p>
         </div>
       </div>
 

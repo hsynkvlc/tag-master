@@ -221,7 +221,9 @@
                 reply('CONSENT_STATE', getConsentState());
                 break;
 
-
+            case 'GET_PERFORMANCE_METRICS':
+                reply('PERFORMANCE_METRICS', getPerformanceMetrics());
+                break;
 
             case 'CLEAR_GOOGLE_COOKIES':
                 clearGoogleCookies();
@@ -577,42 +579,101 @@
 
 
     function getConsentState() {
-        // Try google_tag_data first (most reliable for final state)
-        if (window.google_tag_data?.ics?.entries) {
-            // entries is a map-like object sometimes, or check 'entries'
-            // Structure: { ad_storage: 'granted', ... }
-            // Simplify: extracting from GTM internal API if possible or dataLayer
-        }
-
-        // Fallback: Replay dataLayer to find latest consent state
         const state = {
             ad_storage: 'unknown',
             analytics_storage: 'unknown',
             ad_user_data: 'unknown',
-            ad_personalization: 'unknown'
+            ad_personalization: 'unknown',
+            functionality_storage: 'unknown',
+            personalization_storage: 'unknown',
+            security_storage: 'unknown'
         };
 
-        // Scan dataLayer for consent commands
-        if (Array.isArray(window.dataLayer)) {
-            window.dataLayer.forEach(item => {
-                // Check for {0: 'consent', 1: 'default'|'update', 2: { ... }}
+        // 1. Try internal GTM data (most accurate)
+        if (window.google_tag_data?.ics?.entries) {
+            const entries = window.google_tag_data.ics.entries;
+            Object.keys(entries).forEach(key => {
+                if (state.hasOwnProperty(key)) {
+                    state[key] = entries[key].current === 'granted' ? 'granted' : 'denied';
+                }
+            });
+        }
+
+        // 2. Fallback to dataLayer scan
+        const targetDlName = window.__swissKnife.dataLayerName || 'dataLayer';
+        if (Array.isArray(window[targetDlName])) {
+            window[targetDlName].forEach(item => {
                 if (item['0'] === 'consent' && (item['1'] === 'default' || item['1'] === 'update')) {
                     const status = item['2'] || {};
                     Object.keys(status).forEach(key => {
                         if (state.hasOwnProperty(key)) {
-                            state[key] = status[key];
+                            // Only update if not already set by GTM API or if it's an 'update'
+                            if (state[key] === 'unknown' || item['1'] === 'update') {
+                                state[key] = status[key];
+                            }
                         }
                     });
                 }
-                // Check arguments style: arguments: ['consent', 'update', {...}] - handled by dataLayer override usually
-                // But raw dataLayer push might be arguments object converted. 
-                // Standard push: { '0': 'consent', ... }
             });
         }
 
         return state;
     }
 
+    function getPerformanceMetrics() {
+        if (!window.performance || !window.performance.getEntriesByType) return null;
+
+        const resources = window.performance.getEntriesByType('resource');
+        const gtmResources = resources.filter(r => r.name.includes('googletagmanager.com/gtm.js') || r.name.includes('googletagmanager.com/gtag/js'));
+
+        let totalTime = 0;
+        let totalSize = 0;
+
+        gtmResources.forEach(r => {
+            totalTime += r.duration;
+            totalSize += r.transferSize || 0;
+        });
+
+        return {
+            containerCount: gtmResources.length,
+            loadTimeMs: Math.round(totalTime),
+            sizeKb: Math.round(totalSize / 1024),
+            impactScore: totalTime > 500 ? 'High' : (totalTime > 200 ? 'Medium' : 'Low')
+        };
+    }
+
+    // Detect GTM containers
+    function detectGTMContainers() {
+        const containers = [];
+
+        // Check for google_tag_manager object
+        if (window.google_tag_manager) {
+            for (const key in window.google_tag_manager) {
+                if (key.startsWith('GTM-') || key.startsWith('G-')) {
+                    const gtm = window.google_tag_manager[key];
+
+                    // Try to find Client ID for GA4
+                    let cid = null;
+                    if (key.startsWith('G-')) {
+                        try {
+                            // Use gtag get if available
+                            if (typeof window.gtag === 'function') {
+                                window.gtag('get', key, 'client_id', (r) => cid = r);
+                            }
+                        } catch (e) { }
+                    }
+
+                    containers.push({
+                        id: key,
+                        type: key.startsWith('GTM-') ? 'GTM' : 'GA4',
+                        dataLayer: gtm?.dataLayer?.name || 'dataLayer',
+                        cid: cid
+                    });
+                }
+            }
+        }
+        return containers;
+    }
 
     // Inject GTM container
     function injectGTM(gtmId, options = {}) {
@@ -622,12 +683,10 @@
             preview = false
         } = options;
 
-        // Remove existing if override
         if (options.override) {
             removeGTM(gtmId);
         }
 
-        // Initialize dataLayer
         if (initDataLayer) {
             window.dataLayer = window.dataLayer || [];
             window.dataLayer.push({
@@ -636,25 +695,21 @@
             });
         }
 
-        // Create script
         const script = document.createElement('script');
         script.async = true;
         script.id = 'swiss-knife-gtm-' + gtmId;
         script.src = 'https://www.googletagmanager.com/gtm.js?id=' + gtmId;
 
         if (preview) {
-            // Safe debug mode without forcing environment
             script.src += '&gtm_debug=x';
         }
 
-        // Insert script
         if (position === 'head') {
             document.head.insertBefore(script, document.head.firstChild);
         } else {
             document.body.insertBefore(script, document.body.firstChild);
         }
 
-        // Create noscript iframe
         const noscript = document.createElement('noscript');
         noscript.id = 'swiss-knife-gtm-noscript-' + gtmId;
         const iframe = document.createElement('iframe');

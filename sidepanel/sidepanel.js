@@ -117,6 +117,10 @@ const elements = {
   // Cookies
   refreshCookies: document.getElementById('refreshCookies'),
   cookieList: document.getElementById('cookieList'),
+  // Consent
+  refreshConsent: document.getElementById('refreshConsent'),
+  consentList: document.getElementById('consentList'),
+  consentWarning: document.getElementById('consentWarning'),
   // Theme
   themeToggle: document.getElementById('themeToggle'),
   // Support Link
@@ -267,12 +271,12 @@ elements.tabs.forEach(tab => {
     document.getElementById(`panel-${tabName}`).classList.add('active');
     currentTab = tabName;
 
-    if (tabName === 'network') {
-      renderNetworkRequests();
-    }
-    if (tabName === 'about') {
-      verifyElements(); // Ensure about references are hot
-    }
+    if (tabName === 'network') renderNetworkRequests();
+    if (tabName === 'consent') loadConsentState();
+    if (tabName === 'cookies') refreshCookies();
+    if (tabName === 'push') renderSnippets();
+    if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
+    if (tabName === 'about') verifyElements();
   });
 });
 
@@ -388,30 +392,37 @@ async function detectContainers(isRetry = false) {
     const containers = Array.isArray(response) ? response : [];
 
     if (containers.length > 0) {
-      // Containers found, reset retries
       detectionRetries = 0;
       elements.refreshContainers.querySelector('svg').classList.remove('spin-animation');
-      elements.containerList.innerHTML = containers.map(c => `
+      elements.containerList.innerHTML = containers.map(c => {
+        const ga4DebugUrl = c.type === 'GA4' ? `https://analytics.google.com/analytics/web/#/p${c.id.replace('G-', '')}/debugview` : null;
+        return `
         <div class="container-item">
           <div class="container-info">
             <div class="container-icon ${c.type?.toLowerCase() || 'gtm'}">${c.type === 'GA4' ? 'G4' : 'GTM'}</div>
             <div>
               <div class="container-id">${c.id}</div>
-              <div class="container-type">${c.type || 'GTM'}</div>
+              <div class="container-type">${c.type || 'GTM'} ${c.dataLayer ? `(${c.dataLayer})` : ''}</div>
             </div>
           </div>
-          <div class="container-status"></div>
+          <div style="display:flex;gap:4px">
+            ${ga4DebugUrl ? `
+              <a href="${ga4DebugUrl}" target="_blank" class="btn-icon btn-small" title="Open GA4 DebugView" style="color:var(--google-blue);border-color:var(--google-blue);text-decoration:none;display:flex">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+              </a>
+            ` : ''}
+            <button class="btn-icon btn-small" onclick="navigator.clipboard.writeText('${c.id}')" title="Copy ID">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
         </div>
-      `).join('');
+      `}).join('');
     } else {
-      // No containers found yet
       if (detectionRetries < MAX_RETRIES) {
         detectionRetries++;
-        // Show loading state if it's the first try
         if (detectionRetries === 1) {
           elements.containerList.innerHTML = `<div class="empty-state"><p>Scanning...</p></div>`;
         }
-        // Custom backoff: 500ms, 1500ms, 3000ms
         setTimeout(() => detectContainers(true), detectionRetries * 1000);
         return;
       }
@@ -426,16 +437,48 @@ async function detectContainers(isRetry = false) {
         </div>
       `;
     }
-  } catch (e) {
-    console.error('Failed to detect containers:', e);
+  } catch (err) {
+    console.error('Detection failed:', err);
+    elements.containerList.innerHTML = `<div class="empty-state"><p style="color:var(--error-red)">Error: ${err.message}</p></div>`;
     elements.refreshContainers.querySelector('svg').classList.remove('spin-animation');
-    elements.containerList.innerHTML = `
-      <div class="empty-state">
-        <p style="color:var(--error-red)">Detection failed</p>
-        <p style="font-size:11px;margin-top:4px">Try refreshing the page</p>
+  }
+}
+
+// ============================================
+// Consent Management
+// ============================================
+async function loadConsentState() {
+  const response = await chrome.runtime.sendMessage({ type: 'GET_CONSENT_STATE' });
+  if (response) {
+    renderConsentState(response);
+  }
+}
+
+function renderConsentState(state) {
+  const items = Object.entries(state);
+  const isV2Ready = state.ad_user_data !== 'unknown' && state.ad_personalization !== 'unknown';
+
+  if (elements.consentWarning) {
+    elements.consentWarning.style.display = isV2Ready ? 'none' : 'block';
+  }
+
+  elements.consentList.innerHTML = items.map(([key, value]) => {
+    const isGranted = value === 'granted';
+    const isUnknown = value === 'unknown';
+
+    return `
+      <div class="container-item" style="padding: 8px 12px">
+        <div style="font-size: 11px; font-weight: 500">${key.replace('_storage', '')}</div>
+        <div class="badge" style="background:${isUnknown ? 'var(--bg-hover)' : (isGranted ? 'var(--success-green)' : 'var(--error-red)')}; color: white; font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase">
+          ${value}
+        </div>
       </div>
     `;
-  }
+  }).join('');
+}
+
+if (elements.refreshConsent) {
+  elements.refreshConsent.addEventListener('click', loadConsentState);
 }
 
 elements.refreshContainers.addEventListener('click', () => {
@@ -1101,6 +1144,24 @@ async function runAudit() {
   elements.runAudit.disabled = true;
   elements.auditResults.innerHTML = '<div class="empty-state"><p>Analyzing tracking setup...</p></div>';
 
+  try {
+    const perf = await chrome.runtime.sendMessage({ type: 'GET_PERFORMANCE_METRICS' });
+    if (perf) {
+      const perfColor = perf.impactScore === 'High' ? 'var(--error-red)' : (perf.impactScore === 'Medium' ? 'var(--warning-yellow)' : 'var(--success-green)');
+      elements.auditResults.innerHTML = `
+        <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:8px;border-left:4px solid ${perfColor}">
+          <div style="font-size:11px;font-weight:bold;color:var(--text-primary)">Tracking Performance Impact: ${perf.impactScore}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;font-size:10px">
+            <div>Scripts: <span style="font-weight:600">${perf.containerCount}</span></div>
+            <div>Overhead: <span style="font-weight:600">${perf.sizeKb} KB</span></div>
+            <div>Load Time: <span style="font-weight:600">${perf.loadTimeMs} ms</span></div>
+          </div>
+        </div>
+        <div style="margin:12px 0;height:1px;background:var(--border)"></div>
+      `;
+    }
+  } catch (e) { console.error('Perf check failed', e); }
+
   const checks = [];
 
   // 1. GTM Check
@@ -1294,14 +1355,7 @@ async function renderSnippets() {
 }
 
 // Update tab navigation to trigger renders
-elements.tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    const tabName = tab.dataset.tab;
-    if (tabName === 'cookies') refreshCookies();
-    if (tabName === 'push') renderSnippets();
-    if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
-  });
-});
+// GA4 Session Info Update Logic
 
 async function loadSessionInfo() {
   const info = await chrome.runtime.sendMessage({ type: 'GA4_SESSION_GET' });

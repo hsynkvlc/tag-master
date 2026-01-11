@@ -125,6 +125,9 @@
       case 'GET_CONSENT_STATE':
         return await sendCommand('GET_CONSENT_STATE');
 
+      case 'GET_PERFORMANCE_METRICS':
+        return await sendCommand('GET_PERFORMANCE_METRICS');
+
       case 'SELECTOR_START':
         return await sendCommand('SELECTOR_START');
 
