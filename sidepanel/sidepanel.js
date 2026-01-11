@@ -77,6 +77,8 @@ const elements = {
   // Network Elements
   clearNetwork: document.getElementById('clearNetwork'),
   networkList: document.getElementById('networkList'),
+  networkFilter: document.getElementById('networkFilter'),
+  networkStats: document.getElementById('networkStats'),
 
   // Injected Elements
   injectedSection: document.getElementById('injectedSection'),
@@ -613,17 +615,82 @@ async function loadEvents() {
 // ============================================
 // Network Monitor
 // ============================================
+const GA4_PARAMS = {
+  'en': 'Event Name',
+  'tid': 'Tracking ID',
+  'cid': 'Client ID',
+  'sid': 'Session ID',
+  'sct': 'Session Count',
+  'seg': 'Session Engagement',
+  'dl': 'Page Location',
+  'dr': 'Referrer',
+  'dt': 'Page Title',
+  'ul': 'Language',
+  'sr': 'Screen Resolution',
+  'vp': 'Viewport',
+  'ep.': 'Event Parameter: ',
+  'up.': 'User Property: ',
+  'cu': 'Currency',
+  '_ee': 'Enhanced Measurement'
+};
+
 function renderNetworkRequests() {
-  if (networkRequests.length > 0) {
-    elements.networkList.innerHTML = networkRequests.slice(-50).reverse().map(req => {
+  const filter = elements.networkFilter?.value?.toLowerCase() || '';
+  const filtered = networkRequests.filter(req =>
+    !filter || req.url.toLowerCase().includes(filter) || (req.typeName || req.type).toLowerCase().includes(filter)
+  );
+
+  // Update Stats
+  if (elements.networkStats) {
+    const stats = {
+      GA4: networkRequests.filter(r => r.type.includes('GA4')).length,
+      GTM: networkRequests.filter(r => r.type === 'GTM_JS').length,
+      Server: networkRequests.filter(r => r.isServerSide).length,
+      Total: networkRequests.length
+    };
+
+    elements.networkStats.innerHTML = Object.entries(stats).map(([label, count]) => `
+      <div style="background:var(--bg-secondary);padding:6px 10px;border-radius:6px;border:1px solid var(--border);white-space:nowrap;font-size:10px">
+        <span style="color:var(--text-muted)">${label}:</span> <span style="font-weight:bold;color:var(--accent-blue)">${count}</span>
+      </div>
+    `).join('');
+  }
+
+  if (filtered.length > 0) {
+    elements.networkList.innerHTML = filtered.slice(-50).reverse().map(req => {
       let urlObj;
-      try { urlObj = new URL(req.url); } catch { urlObj = { pathname: req.url, searchParams: [] } }
+      try {
+        urlObj = new URL(req.url);
+      } catch {
+        urlObj = { pathname: req.url, searchParams: new URLSearchParams() };
+      }
+
       const isSuccess = (req.statusCode >= 200 && req.statusCode < 300) || req.statusCode === 0;
+      const isGA4 = req.type.includes('GA4');
 
       const paramRows = [];
       if (urlObj.searchParams) {
         urlObj.searchParams.forEach((val, key) => {
-          paramRows.push(`<div class="param-key">${key}:</div><div class="param-value">${val}</div>`);
+          let label = key;
+          let isHighlight = false;
+
+          if (isGA4) {
+            // GA4 Mapping
+            if (GA4_PARAMS[key]) {
+              label = GA4_PARAMS[key];
+              isHighlight = true;
+            } else if (key.startsWith('ep.')) {
+              label = 'EP: ' + key.substring(3);
+              isHighlight = true;
+            } else if (key.startsWith('up.')) {
+              label = 'UP: ' + key.substring(3);
+            }
+          }
+
+          paramRows.push(`
+            <div class="param-key" style="${isHighlight ? 'color:var(--accent-blue);font-weight:600' : ''}">${label}:</div>
+            <div class="param-value" style="word-break:break-all">${val}</div>
+          `);
         });
       }
 
@@ -631,6 +698,7 @@ function renderNetworkRequests() {
         <div class="network-badges">
           ${req.isServerSide ? '<span class="badge badge-server">Server-Side</span>' : ''}
           ${req.hasEnhancedConversions ? '<span class="badge badge-ec">Enhanced Conversions</span>' : ''}
+          ${isGA4 && urlObj.searchParams.get('en') ? `<span class="badge" style="background:var(--google-blue)">${urlObj.searchParams.get('en')}</span>` : ''}
         </div>
       `;
 
@@ -638,7 +706,7 @@ function renderNetworkRequests() {
       <div class="network-item" style="border-left: 3px solid ${req.typeColor || '#ccc'}">
         <div class="network-header">
            <span class="network-method ${req.method}">${req.method || 'GET'}</span>
-           <span class="network-type">${req.typeName || req.type}</span>
+           <span class="network-type">${req.typeName || (req.type === 'GA4' ? 'Google Analytics 4' : req.type)}</span>
            <span class="network-status ${isSuccess ? 'success' : 'error'}">${req.statusCode || (req.error ? 'ERR' : '...')}</span>
            <span style="margin-left:auto;font-size:10px;color:var(--text-muted)">${formatTimestamp(req.timestamp)}</span>
         </div>
@@ -655,18 +723,31 @@ function renderNetworkRequests() {
                  </div>
                ` : ''}
             </div>
-            <div style="margin-bottom:6px;color:var(--text-secondary)"><strong>Request URL:</strong></div>
-            <div style="word-break:break-all;color:var(--text-primary);font-family:'Consolas',monospace;font-size:11px;margin-bottom:12px;padding:6px;background:var(--bg-primary);border-radius:4px">${req.url}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="color:var(--text-secondary);font-weight:600">Request Details</span>
+              <button class="btn-icon btn-small copy-curl" data-url="${req.url}" title="Copy URL">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+              </button>
+            </div>
+            <div style="word-break:break-all;color:var(--text-primary);font-family:'Consolas',monospace;font-size:11px;margin-bottom:12px;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px">${req.url}</div>
             
             ${paramRows.length ? `
-              <div style="margin-bottom:6px;color:var(--text-secondary)"><strong>Query Parameters:</strong></div>
-              <div class="network-params">
+              <div style="margin-bottom:8px;color:var(--text-secondary);font-size:11px;font-weight:600">Parameters (${urlObj.searchParams.size})</div>
+              <div class="network-params" style="border:1px solid var(--border);border-radius:6px;background:var(--bg-surface)">
                 ${paramRows.join('')}
               </div>
             ` : ''}
         </div>
       </div>
     `}).join('');
+
+    elements.networkList.querySelectorAll('.copy-curl').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(btn.dataset.url);
+        showToast('URL Copied');
+      });
+    });
 
     elements.networkList.querySelectorAll('.network-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -715,6 +796,10 @@ async function loadNetworkRequests() {
   } catch (e) {
     console.warn('Failed to load network requests:', e);
   }
+}
+
+if (elements.networkFilter) {
+  elements.networkFilter.addEventListener('input', renderNetworkRequests);
 }
 
 if (elements.clearNetwork) {
