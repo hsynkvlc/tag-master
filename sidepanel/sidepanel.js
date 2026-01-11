@@ -55,6 +55,7 @@ const PRESETS = {
 // ============================================
 let events = [];
 let networkRequests = [];
+let expandedNetworkItems = new Set();
 let currentTab = 'gtm';
 
 // ============================================
@@ -702,8 +703,10 @@ function renderNetworkRequests() {
         </div>
       `;
 
+      const isExpanded = expandedNetworkItems.has(req.id);
+
       return `
-      <div class="network-item" style="border-left: 3px solid ${req.typeColor || '#ccc'}">
+      <div class="network-item" data-id="${req.id}" style="border-left: 3px solid ${isExpanded ? 'var(--accent-blue)' : (req.typeColor || '#ccc')}">
         <div class="network-header">
            <span class="network-method ${req.method}">${req.method || 'GET'}</span>
            <span class="network-type">${req.typeName || (req.type === 'GA4' ? 'Google Analytics 4' : req.type)}</span>
@@ -712,7 +715,7 @@ function renderNetworkRequests() {
         </div>
         <div class="network-url" title="${req.url}">${urlObj.pathname}</div>
         ${badgeHtml}
-        <div class="network-details" style="display:none">
+        <div class="network-details" style="display:${isExpanded ? 'block' : 'none'}">
             <div style="margin-bottom:12px;display:flex;flex-direction:column;gap:8px">
                ${req.hasEnhancedConversions ? `
                  <div class="validation-warning" style="background:rgba(34,197,94,0.1);color:var(--success-green);border-color:rgba(34,197,94,0.3)">
@@ -751,16 +754,20 @@ function renderNetworkRequests() {
 
     elements.networkList.querySelectorAll('.network-item').forEach(item => {
       item.addEventListener('click', (e) => {
-        // Don't toggle if clicking inside details (to allow selection)
         if (e.target.closest('.network-details')) return;
 
+        const id = item.dataset.id;
         const detailsEl = item.querySelector('.network-details');
         const isExpanded = detailsEl.style.display !== 'none';
-        detailsEl.style.display = isExpanded ? 'none' : 'block';
-        if (!isExpanded) {
-          item.style.borderColor = 'var(--accent-blue)';
-        } else {
+
+        if (isExpanded) {
+          detailsEl.style.display = 'none';
           item.style.borderColor = 'var(--border)';
+          expandedNetworkItems.delete(id);
+        } else {
+          detailsEl.style.display = 'block';
+          item.style.borderColor = 'var(--accent-blue)';
+          expandedNetworkItems.add(id);
         }
       });
     });
@@ -809,6 +816,7 @@ if (elements.clearNetwork) {
   elements.clearNetwork.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'NETWORK_CLEAR' });
     networkRequests = [];
+    expandedNetworkItems.clear();
     renderNetworkRequests();
   });
 }
