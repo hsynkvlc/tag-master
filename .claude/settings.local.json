@@ -19,7 +19,8 @@
       "Bash(npx playwright:*)",
       "Bash(node tests/extension.test.js:*)",
       "Bash(npm init:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd Playwright tests and package.json\n\n- Added extension.test.js with automated tests\n- GTM injection test\n- DataLayer push/capture test\n- GA4 URL parsing test\n- npm package.json with Playwright dependency\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd Playwright tests and package.json\n\n- Added extension.test.js with automated tests\n- GTM injection test\n- DataLayer push/capture test\n- GA4 URL parsing test\n- npm package.json with Playwright dependency\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)"
     ]
   }
 }
