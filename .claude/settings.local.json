@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(winget install:*)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth login --web --git-protocol https)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create google-swiss-knife --public --description \"Google Swiss Knife - Multi-tool project\" --source \"C:\\\\Users\\\\Huseyin\\\\Desktop\\\\Google Swiss Knife\" --push)",
+      "Bash(git init:*)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create google-swiss-knife --public --description \"Google Swiss Knife - Multi-tool project\")",
+      "Bash(git -C \"C:\\\\Users\\\\Huseyin\\\\Desktop\\\\Google Swiss Knife\" remote add:*)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo edit hsynkvlc/google-swiss-knife --visibility private)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo edit hsynkvlc/google-swiss-knife --visibility private --accept-visibility-change-consequences)",
+      "Bash(powershell -Command:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
