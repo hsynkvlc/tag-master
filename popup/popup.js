@@ -47,10 +47,4 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }
-
-  // Open DevTools hint
-  document.getElementById('openDevTools').addEventListener('click', () => {
-    alert('Press F12 to open DevTools, then navigate to the "Tag Master" tab.');
-    window.close();
-  });
 });
