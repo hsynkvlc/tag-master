@@ -26,7 +26,7 @@
   let pendingCallbacks = {};
 
   window.addEventListener('message', (event) => {
-    if (event.source !== window || event.data?.source !== 'swiss-knife-for-google') {
+    if (event.source !== window || event.data?.source !== 'tag-master-extension') {
       return;
     }
 
@@ -64,19 +64,20 @@
       pendingCallbacks[requestId] = resolve;
 
       window.postMessage({
-        source: 'swiss-knife-for-google-command',
+        source: 'tag-master-extension-command',
         type,
         payload: { ...data, requestId }
       }, '*');
 
-      // Timeout fallback
+      // Timeout fallback (10s for interactive operations like selector)
+      const timeoutDuration = type.includes('SELECTOR') ? 30000 : 8000;
       setTimeout(() => {
         if (pendingCallbacks[requestId]) {
           console.warn('[Tag Master] Command timed out:', type);
           pendingCallbacks[requestId](null);
           delete pendingCallbacks[requestId];
         }
-      }, 5000);
+      }, timeoutDuration);
     });
   }
 

@@ -6,10 +6,10 @@
 (function () {
     'use strict';
 
-    const SWISS_KNIFE_ID = 'swiss-knife-for-google';
+    const TAG_MASTER_ID = 'tag-master-extension';
 
     // Store original dataLayer array
-    window.__swissKnife = window.__swissKnife || {
+    window.__tagMaster = window.__tagMaster || {
         originalPush: null,
         events: [],
         containers: [],
@@ -21,21 +21,21 @@
     if (window.google_tag_manager) {
         for (const key in window.google_tag_manager) {
             if (key.startsWith('GTM-') && window.google_tag_manager[key].dataLayer) {
-                window.__swissKnife.dataLayerName = window.google_tag_manager[key].dataLayer.name || 'dataLayer';
+                window.__tagMaster.dataLayerName = window.google_tag_manager[key].dataLayer.name || 'dataLayer';
                 break;
             }
         }
     }
 
-    const dlName = window.__swissKnife.dataLayerName;
+    const dlName = window.__tagMaster.dataLayerName;
     window[dlName] = window[dlName] || [];
 
     // Capture existing events
-    if (!window.__swissKnife.initialized) {
+    if (!window.__tagMaster.initialized) {
         window[dlName].forEach((event, index) => {
             sendEvent('existing', event, index);
         });
-        window.__swissKnife.initialized = true;
+        window.__tagMaster.initialized = true;
         console.log('[Tag Master] Monitoring DataLayer:', dlName);
     }
 
@@ -45,9 +45,9 @@
             for (const key in window.google_tag_manager) {
                 if (key.startsWith('GTM-') && window.google_tag_manager[key].dataLayer) {
                     const newName = window.google_tag_manager[key].dataLayer.name;
-                    if (newName && newName !== window.__swissKnife.dataLayerName) {
+                    if (newName && newName !== window.__tagMaster.dataLayerName) {
                         console.log('[Tag Master] DataLayer name change detected:', newName);
-                        window.__swissKnife.dataLayerName = newName;
+                        window.__tagMaster.dataLayerName = newName;
                         // Trigger re-init logic if needed
                     }
                 }
@@ -56,14 +56,14 @@
     }, 5000);
 
     // Override push method
-    if (!window.__swissKnife.originalPush && typeof window[dlName].push === 'function') {
-        window.__swissKnife.originalPush = window[dlName].push.bind(window[dlName]);
+    if (!window.__tagMaster.originalPush && typeof window[dlName].push === 'function') {
+        window.__tagMaster.originalPush = window[dlName].push.bind(window[dlName]);
 
         window[dlName].push = function (...args) {
             args.forEach((arg, index) => {
                 sendEvent('push', arg, window[dlName].length + index);
             });
-            return window.__swissKnife.originalPush(...args);
+            return window.__tagMaster.originalPush(...args);
         };
     }
 
@@ -71,7 +71,7 @@
     function sendEvent(type, data, index) {
         const eventName = data?.event || data?.['0'] || 'unknown';
         window.postMessage({
-            source: SWISS_KNIFE_ID,
+            source: TAG_MASTER_ID,
             type: 'DATALAYER_EVENT',
             payload: {
                 eventType: type,
@@ -146,7 +146,7 @@
 
     // Listen for commands from content script
     window.addEventListener('message', (event) => {
-        if (event.source !== window || event.data?.source !== SWISS_KNIFE_ID + '-command') {
+        if (event.source !== window || event.data?.source !== TAG_MASTER_ID + '-command') {
             return;
         }
 
@@ -155,7 +155,7 @@
 
         const reply = (msgType, data) => {
             window.postMessage({
-                source: SWISS_KNIFE_ID,
+                source: TAG_MASTER_ID,
                 type: msgType,
                 payload: {
                     requestId,
@@ -181,7 +181,7 @@
 
             case 'PUSH_DATALAYER':
                 try {
-                    const targetDlName = window.__swissKnife.dataLayerName || 'dataLayer';
+                    const targetDlName = window.__tagMaster.dataLayerName || 'dataLayer';
                     if (!window[targetDlName]) window[targetDlName] = [];
 
                     // Direct push
@@ -278,18 +278,18 @@
 
         if (!highlightEl) {
             highlightEl = document.createElement('div');
-            highlightEl.id = 'swiss-knife-selector-highlight';
+            highlightEl.id = 'tag-master-selector-highlight';
             highlightEl.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;background:rgba(66,133,244,0.15);border:2px solid #4285f4;transition:all 0.05s ease;display:none;box-shadow: 0 0 0 9999px rgba(0,0,0,0.1);';
             document.body.appendChild(highlightEl);
 
             // Add a floating indicator
             const badge = document.createElement('div');
             badge.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#4285f4;color:white;padding:8px 16px;border-radius:20px;font-family:sans-serif;font-size:12px;font-weight:bold;z-index:2147483647;box-shadow:0 4px 12px rgba(0,0,0,0.2);pointer-events:none;';
-            badge.id = 'swiss-knife-selector-badge';
+            badge.id = 'tag-master-selector-badge';
             badge.innerHTML = '<span style="margin-right:8px">🎯</span> Tag Master Selection Mode <span style="margin-left:8px;opacity:0.7;font-weight:normal">(ESC to cancel)</span>';
             document.body.appendChild(badge);
         } else {
-            document.getElementById('swiss-knife-selector-badge').style.display = 'block';
+            document.getElementById('tag-master-selector-badge').style.display = 'block';
         }
 
         document.addEventListener('mouseover', onSelectorHover, true);
@@ -301,7 +301,7 @@
     function disableSelectorMode() {
         selectorActive = false;
         if (highlightEl) highlightEl.style.display = 'none';
-        const badge = document.getElementById('swiss-knife-selector-badge');
+        const badge = document.getElementById('tag-master-selector-badge');
         if (badge) badge.style.display = 'none';
 
         document.removeEventListener('mouseover', onSelectorHover, true);
@@ -317,7 +317,7 @@
 
         hoverFrame = requestAnimationFrame(() => {
             const target = e.target;
-            if (target === highlightEl || target.id === 'swiss-knife-selector-badge') return;
+            if (target === highlightEl || target.id === 'tag-master-selector-badge') return;
 
             const rect = target.getBoundingClientRect();
             highlightEl.style.top = rect.top + 'px';
@@ -344,7 +344,7 @@
         }
 
         window.postMessage({
-            source: SWISS_KNIFE_ID,
+            source: TAG_MASTER_ID,
             type: 'SELECTOR_RESULT',
             payload: {
                 requestId: lastRequestId,
@@ -369,7 +369,7 @@
         const selection = window.getSelection();
         if (!selection || selection.rangeCount === 0) {
             window.postMessage({
-                source: SWISS_KNIFE_ID,
+                source: TAG_MASTER_ID,
                 type: 'SELECTOR_RESULT',
                 payload: { requestId, error: 'No text selected.' }
             }, '*');
@@ -384,7 +384,7 @@
         const jsPath = getJsPath(target);
 
         window.postMessage({
-            source: SWISS_KNIFE_ID,
+            source: TAG_MASTER_ID,
             type: 'SELECTOR_RESULT',
             payload: {
                 requestId: requestId,
@@ -490,16 +490,27 @@
 
     // GA4 Blocking Logic
     function toggleGA4Block(enabled) {
-        if (enabled) {
-            window.sessionStorage.setItem('swissKnifeBlockGA4', 'true');
-        } else {
-            window.sessionStorage.removeItem('swissKnifeBlockGA4');
+        try {
+            if (enabled) {
+                window.sessionStorage.setItem('tagMasterBlockGA4', 'true');
+            } else {
+                window.sessionStorage.removeItem('tagMasterBlockGA4');
+            }
+            window.location.reload();
+        } catch (e) {
+            console.error('[Tag Master] Failed to access sessionStorage:', e);
         }
-        window.location.reload();
     }
 
     // Auto-block check for GA4
-    if (window.sessionStorage.getItem('swissKnifeBlockGA4') === 'true') {
+    let isGA4Blocked = false;
+    try {
+        isGA4Blocked = window.sessionStorage.getItem('tagMasterBlockGA4') === 'true';
+    } catch (e) {
+        // sessionStorage access denied (sandboxed iframe, etc.)
+    }
+
+    if (isGA4Blocked) {
         console.warn('[Tag Master] Blocking GA4 Hits (Simulation Mode)');
 
         // Block sendBeacon
@@ -663,7 +674,7 @@
         } catch (e) { }
 
         // 2. Fallback to dataLayer scan (Chronological Replay)
-        const targetDlName = window.__swissKnife.dataLayerName || 'dataLayer';
+        const targetDlName = window.__tagMaster.dataLayerName || 'dataLayer';
         if (Array.isArray(window[targetDlName])) {
             window[targetDlName].forEach(item => {
                 // Check standard arguments object (arguments[0] === 'consent') or pushed object
@@ -792,7 +803,7 @@
 
         const script = document.createElement('script');
         script.async = true;
-        script.id = 'swiss-knife-gtm-' + gtmId;
+        script.id = 'tag-master-gtm-' + gtmId;
         script.src = 'https://www.googletagmanager.com/gtm.js?id=' + gtmId;
 
         if (preview) {
@@ -806,7 +817,7 @@
         }
 
         const noscript = document.createElement('noscript');
-        noscript.id = 'swiss-knife-gtm-noscript-' + gtmId;
+        noscript.id = 'tag-master-gtm-noscript-' + gtmId;
         const iframe = document.createElement('iframe');
         iframe.src = 'https://www.googletagmanager.com/ns.html?id=' + gtmId;
         iframe.height = '0';
@@ -816,7 +827,7 @@
         document.body.insertBefore(noscript, document.body.firstChild);
 
         window.postMessage({
-            source: SWISS_KNIFE_ID,
+            source: TAG_MASTER_ID,
             type: 'GTM_INJECTED',
             payload: { gtmId, success: true }
         }, '*');
@@ -824,8 +835,8 @@
 
     // Remove GTM container
     function removeGTM(gtmId) {
-        const script = document.getElementById('swiss-knife-gtm-' + gtmId);
-        const noscript = document.getElementById('swiss-knife-gtm-noscript-' + gtmId);
+        const script = document.getElementById('tag-master-gtm-' + gtmId);
+        const noscript = document.getElementById('tag-master-gtm-noscript-' + gtmId);
 
         if (script) script.remove();
         if (noscript) noscript.remove();
@@ -833,7 +844,7 @@
         // Note: Cannot fully remove GTM once loaded, would need page reload
 
         window.postMessage({
-            source: SWISS_KNIFE_ID,
+            source: TAG_MASTER_ID,
             type: 'GTM_REMOVED',
             payload: { gtmId, success: true }
         }, '*');
@@ -844,6 +855,13 @@
     // ============================================
     function detectTechnologies() {
         const detected = [];
+
+        // Wait for DOM to be ready
+        if (!document.body) {
+            console.warn('[Tag Master] DOM not ready for tech detection');
+            return detected;
+        }
+
         const scripts = Array.from(document.querySelectorAll('script[src]')).map(s => s.src.toLowerCase());
         const allScripts = Array.from(document.querySelectorAll('script')).map(s => s.innerHTML || '');
         const links = Array.from(document.querySelectorAll('link[href]')).map(l => l.href.toLowerCase());
@@ -1534,11 +1552,14 @@
             if (sig.globals) {
                 for (const g of sig.globals) {
                     try {
-                        if (window[g] !== undefined && window[g] !== null) {
+                        if (typeof window[g] !== 'undefined' && window[g] !== null) {
                             found = true;
                             break;
                         }
-                    } catch (e) { }
+                    } catch (e) {
+                        // Some properties might throw errors when accessed
+                        continue;
+                    }
                 }
             }
 
@@ -1555,10 +1576,14 @@
             // Check selectors
             if (!found && sig.selector) {
                 try {
-                    if (document.querySelector(sig.selector)) {
+                    const element = document.querySelector(sig.selector);
+                    if (element) {
                         found = true;
                     }
-                } catch (e) { }
+                } catch (e) {
+                    // Invalid selector or DOM access error
+                    console.debug('[Tag Master] Selector error for', name, ':', e.message);
+                }
             }
 
             // Check HTML content for inline scripts
@@ -1576,14 +1601,18 @@
                 if (sig.getVersion) {
                     try {
                         version = sig.getVersion();
-                    } catch (e) { }
+                    } catch (e) {
+                        console.debug('[Tag Master] Version detection error for', name, ':', e.message);
+                    }
                 }
 
                 // Get details if available
                 if (sig.getDetails) {
                     try {
                         details = sig.getDetails();
-                    } catch (e) { }
+                    } catch (e) {
+                        console.debug('[Tag Master] Details detection error for', name, ':', e.message);
+                    }
                 }
 
                 detected.push({
@@ -1602,6 +1631,7 @@
             return a.name.localeCompare(b.name);
         });
 
+        console.log('[Tag Master] Detected', detected.length, 'technologies:', detected.map(t => t.name).join(', '));
         return detected;
     }
 

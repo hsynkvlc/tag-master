@@ -922,7 +922,7 @@ async function detectTechnologies(forceRefresh = false) {
     // Try multiple times with delay for late-loading scripts
     let detected = [];
     let attempts = 0;
-    const maxAttempts = forceRefresh ? 3 : 2;
+    const maxAttempts = forceRefresh ? 4 : 3;
 
     while (attempts < maxAttempts) {
       const response = await chrome.runtime.sendMessage({ type: 'DETECT_TECH' });
@@ -940,9 +940,9 @@ async function detectTechnologies(forceRefresh = false) {
       // If we found some, and it's not a force refresh, stop early
       if (detected.length > 0 && !forceRefresh) break;
 
-      // Wait before retry
+      // Wait before retry (longer wait for better detection)
       if (attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 800));
       }
     }
 
@@ -1561,14 +1561,14 @@ function renderNetworkRequests() {
     });
   } else {
     elements.networkList.innerHTML = `
-      < div class="empty-state" >
+      <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px">
           <circle cx="12" cy="12" r="10"></circle>
           <line x1="2" y1="12" x2="22" y2="12"></line>
           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
         </svg>
         <p>No network requests</p>
-      </div >
+      </div>
       `;
   }
 }
@@ -1891,7 +1891,7 @@ elements.exportJson.addEventListener('click', () => {
       serverSideRequests: networkRequests.filter(r => r.isServerSide).length
     }
   };
-  downloadFile(JSON.stringify(data, null, 2), `swiss - knife -export -${Date.now()}.json`, 'application/json');
+  downloadFile(JSON.stringify(data, null, 2), `tag-master-export-${Date.now()}.json`, 'application/json');
   showToast('JSON Exported with validation data');
 });
 
@@ -1916,7 +1916,7 @@ elements.exportCsv.addEventListener('click', () => {
     ...rows.map(r => r.map(v => `"${v}"`).join(','))
   ].join('\n');
 
-  downloadFile(csvContent, `swiss - knife - events - ${Date.now()}.csv`, 'text/csv');
+  downloadFile(csvContent, `tag-master-events-${Date.now()}.csv`, 'text/csv');
   showToast('CSV Exported with validation');
 });
 
@@ -1983,7 +1983,7 @@ function exportAsHAR() {
             wait: req.timing?.duration || 0,
             receive: 0
           },
-          _swissKnife: {
+          _tagMaster: {
             type: req.type,
             typeName: req.typeName,
             isServerSide: req.isServerSide,
@@ -1994,7 +1994,7 @@ function exportAsHAR() {
     }
   };
 
-  downloadFile(JSON.stringify(har, null, 2), `swiss - knife - network - ${Date.now()}.har`, 'application/json');
+  downloadFile(JSON.stringify(har, null, 2), `tag-master-network-${Date.now()}.har`, 'application/json');
   showToast('HAR file exported - import in Chrome DevTools');
 }
 
@@ -2446,7 +2446,6 @@ async function handleTabChange(tabId) {
 
   // 4. Update Context & Fetch Data
   updateCurrentUrl(tab.url);
-  resetSessionDeepDive();
 
   // Trigger detections
   detectContainers();
@@ -2544,7 +2543,7 @@ async function checkBlockGA4State() {
 
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => window.sessionStorage.getItem('swissKnifeBlockGA4') === 'true'
+      func: () => window.sessionStorage.getItem('tagMasterBlockGA4') === 'true'
     });
 
     const blockGA4 = document.getElementById('blockGA4');

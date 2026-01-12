@@ -18,7 +18,7 @@ let currentSession = null; // Current debugging session
 // ============================================
 // IndexedDB Setup
 // ============================================
-const DB_NAME = 'SwissKnifeDB';
+const DB_NAME = 'TagMasterDB';
 const DB_VERSION = 1;
 let db = null;
 
@@ -487,11 +487,17 @@ async function handleMessage(message, sender) {
 
     case 'DETECT_TECH':
       const [techTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (techTab) {
+      if (techTab && techTab.id) {
         try {
+          // Check if tab is ready (not a chrome:// page or pending)
+          if (techTab.url && (techTab.url.startsWith('chrome://') || techTab.url.startsWith('chrome-extension://'))) {
+            return { technologies: [], error: 'Chrome internal pages not supported' };
+          }
+
           const result = await chrome.tabs.sendMessage(techTab.id, { type: 'DETECT_TECH' });
           return result || { technologies: [] };
         } catch (e) {
+          console.warn('[Tag Master] Tech detection failed:', e.message);
           return { technologies: [], error: 'Failed to detect technologies' };
         }
       }
