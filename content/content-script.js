@@ -6,6 +6,13 @@
 (function () {
   'use strict';
 
+  // Idempotency check
+  if (window.__tagMasterContentScriptLoaded) {
+    console.debug('[Tag Master] Content script already loaded, skipping re-init');
+    return;
+  }
+  window.__tagMasterContentScriptLoaded = true;
+
   const MESSAGE_TYPES = {
     DATALAYER_PUSH: 'DATALAYER_PUSH',
     DATALAYER_INIT: 'DATALAYER_INIT',
@@ -69,8 +76,8 @@
         payload: { ...data, requestId }
       }, '*');
 
-      // Timeout fallback (10s for interactive operations like selector)
-      const timeoutDuration = type.includes('SELECTOR') ? 30000 : 8000;
+      // Timeout fallback (10s for interactive operations like selector, 15s for tech)
+      const timeoutDuration = type.includes('SELECTOR') ? 30000 : (type === 'DETECT_TECH' ? 15000 : 8000);
       setTimeout(() => {
         if (pendingCallbacks[requestId]) {
           console.warn('[Tag Master] Command timed out:', type);

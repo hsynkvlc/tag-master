@@ -178,8 +178,7 @@
         style="width:100%;max-width:280px;padding:16px;background:linear-gradient(135deg, var(--google-red), #b22d21);color:white;border:none;box-shadow:0 8px 24px rgba(234, 67, 53, 0.4);border-radius:14px;font-weight:800;font-size:15px;cursor:pointer;text-transform:uppercase;letter-spacing:1px">
         Unleash the Power
       </button>
-      <div style="margin-top:28px;font-size:11px;color:var(--text-muted);font-weight:600">Forged in the fires of Digital
-        Up • v1.2.0</div>
+      <div style="margin-top:28px;font-size:11px;color:var(--text-muted);font-weight:600">v1.2.0</div>
     </div>
 
     <!-- Content -->
@@ -288,20 +287,32 @@
 
       <!-- Monitor Panel (DataLayer) -->
       <div class="panel" id="panel-monitor">
+        <div class="monitor-layout">
 
-
-        <div class="section">
-          <div class="section-title"
-            style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                style="width:16px;height:16px">
-                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                <polyline points="2 17 12 22 22 17"></polyline>
-                <polyline points="2 12 12 17 22 12"></polyline>
-              </svg>
-              DataLayer Events
+          <!-- Left Sidebar: Page Navigation -->
+          <div class="page-nav-sidebar" id="pageNavSidebar">
+            <div class="page-nav-header">
+              <div class="page-nav-header-title">Pages</div>
             </div>
+            <div class="page-nav-list" id="pageNavList">
+              <!-- Page items rendered here -->
+            </div>
+          </div>
+
+          <!-- Right Content Area -->
+          <div class="events-content">
+            <div class="section">
+              <div class="section-title"
+                style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="width:16px;height:16px">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                  </svg>
+                  <span id="eventsPanelTitle">DataLayer Events</span>
+                </div>
             <div style="display:flex;gap:4px">
 
               <button class="btn-icon" id="exportJson" title="Export as JSON">
@@ -335,14 +346,19 @@
               </svg>
             </button>
           </div>
-          <!-- Quick Filter Chips -->
-          <div id="filterChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
-            <!-- Filter chips will be rendered here -->
+              <!-- Quick Filter Chips -->
+              <div id="filterChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+                <!-- Filter chips will be rendered here -->
+              </div>
+            </div>
+
+            <div class="event-list" id="eventList" style="flex:1;overflow-y:auto">
+              <!-- Events will be added here -->
+            </div>
           </div>
+          <!-- End events-content -->
         </div>
-        <div class="event-list" id="eventList">
-          <!-- Events will be added here -->
-        </div>
+        <!-- End monitor-layout -->
       </div>
 
       <!-- Network Panel -->
@@ -841,6 +857,107 @@
 
     <!-- Toast -->
     <div id="toast" class="toast" style="display:none"></div>
+
+    <!-- Confirm Delete Filter Modal -->
+    <div id="confirmDeleteModal" class="modal" style="display:none">
+      <div class="modal-content" style="max-width:400px">
+        <div class="modal-header">
+          <h3 style="margin:0;font-size:16px;font-weight:700">🗑️ Delete Filter</h3>
+          <button class="btn-icon" id="closeConfirmDelete" style="margin-left:auto">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body" style="padding:20px">
+          <p id="confirmDeleteMessage" style="margin:0 0 20px 0;color:var(--text-primary);font-size:14px;line-height:1.5"></p>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button id="cancelDeleteBtn" style="padding:8px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s">
+              Cancel
+            </button>
+            <button id="confirmDeleteBtn" style="padding:8px 16px;border-radius:6px;border:none;background:var(--error-red);color:white;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s">
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcutsModal" class="modal" style="display:none">
+      <div class="modal-content" style="max-width:500px">
+        <div class="modal-header">
+          <h3 style="margin:0;font-size:16px;font-weight:700">⌨️ Keyboard Shortcuts</h3>
+          <button class="btn-icon" id="closeShortcuts" style="margin-left:auto">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body" style="padding:20px">
+          <div style="display:flex;flex-direction:column;gap:16px">
+
+            <div>
+              <h4 style="font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Navigation</h4>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>1</kbd>
+                  <span>GTM Panel</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>2</kbd>
+                  <span>Events Panel</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>3</kbd>
+                  <span>Network Panel</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>4</kbd>
+                  <span>Audit Panel</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>5</kbd>
+                  <span>Cookies Panel</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>6</kbd>
+                  <span>Consent Panel</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>7</kbd>
+                  <span>Tech Detection</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 style="font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:8px">Actions</h4>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>L</kbd>
+                  <span>Clear Current View</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>F</kbd>
+                  <span>Focus Filter</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>R</kbd>
+                  <span>Refresh Panel</span>
+                </div>
+                <div class="shortcut-row">
+                  <kbd>Ctrl</kbd> + <kbd>?</kbd>
+                  <span>Show This Help</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="sidepanel.js"></script>

@@ -4,7 +4,7 @@
  */
 
 import { MESSAGE_TYPES, DEFAULT_SETTINGS, GOOGLE_PATTERNS } from '../shared/constants.js';
-import { generateId, identifyGoogleRequest, formatTimestamp, isGoogleRequest, validateEnhancedConversions } from '../shared/utils.js';
+import { generateId, identifyGoogleRequest, isGoogleRequest, validateEnhancedConversions } from '../shared/utils.js';
 
 // ============================================
 // State Management
@@ -486,19 +486,62 @@ async function handleMessage(message, sender) {
       return { csp: '', error: 'No active tab' };
 
     case 'DETECT_TECH':
-      const [techTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (techTab && techTab.id) {
+      const techTabId = message.tabId || (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
+
+      if (techTabId) {
         try {
-          // Check if tab is ready (not a chrome:// page or pending)
-          if (techTab.url && (techTab.url.startsWith('chrome://') || techTab.url.startsWith('chrome-extension://'))) {
-            return { technologies: [], error: 'Chrome internal pages not supported' };
+          // Verify tab still exists and is not a restricted URL
+          const tab = await chrome.tabs.get(techTabId).catch(() => null);
+          if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+            return { technologies: [], error: 'Unsupported page type' };
           }
 
-          const result = await chrome.tabs.sendMessage(techTab.id, { type: 'DETECT_TECH' });
-          return result || { technologies: [] };
+          // 1. Try sending message to already injected content script
+          try {
+            // Use a promise wrapper to handle potential message channel closing or hung scripts
+            const result = await Promise.race([
+              chrome.tabs.sendMessage(techTabId, { type: 'DETECT_TECH' }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Background timeout')), 16000))
+            ]);
+
+            if (result && result.technologies) {
+              return result;
+            }
+          } catch (sendError) {
+            console.log('[Tag Master] Content script not responding on tab', techTabId, ', retry with injection...');
+          }
+
+          // 2. Inject scripts if message failed
+          try {
+            // Inject page-script.js first (runs in MAIN world)
+            await chrome.scripting.executeScript({
+              target: { tabId: techTabId },
+              files: ['content/page-script.js'],
+              world: 'MAIN'
+            });
+
+            // Wait briefly for MAIN world script to initialize listeners
+            await new Promise(r => setTimeout(r, 500));
+
+            // Inject content-script.js (runs in ISOLATED world)
+            await chrome.scripting.executeScript({
+              target: { tabId: techTabId },
+              files: ['content/content-script.js']
+            });
+
+            // Wait for scripts to initialize completely
+            await new Promise(r => setTimeout(r, 500));
+
+            // 3. Retry the message
+            const retryResult = await chrome.tabs.sendMessage(techTabId, { type: 'DETECT_TECH' });
+            return retryResult || { technologies: [] };
+          } catch (injectError) {
+            console.warn('[Tag Master] Script injection failed:', injectError.message);
+            return { technologies: [], error: 'Injection failed' };
+          }
         } catch (e) {
           console.warn('[Tag Master] Tech detection failed:', e.message);
-          return { technologies: [], error: 'Failed to detect technologies' };
+          return { technologies: [], error: 'Detection failed' };
         }
       }
       return { technologies: [], error: 'No active tab' };

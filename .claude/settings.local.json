@@ -24,7 +24,32 @@
       "Bash(node tests/full-test.js:*)",
       "Bash(node tests/debug-containers.js:*)",
       "WebFetch(domain:developers.google.com)",
-      "Bash(claude mcp add:*)"
+      "Bash(claude mcp add:*)",
+      "Bash(where:*)",
+      "Bash(python:*)",
+      "Bash(copy \"C:\\\\Users\\\\Huseyin\\\\Desktop\\\\Google Swiss Knife\\\\assets\\\\icons\\\\icon128.png\" \"C:\\\\Users\\\\Huseyin\\\\Desktop\\\\Tag Master Landing\\\\assets\\\\images\\\\logo.png\")",
+      "Bash(set CLOUDFLARE_API_TOKEN=674f11fd5be4dbcc5fffe19e1b5cb7a554876)",
+      "Bash(npx wrangler pages deploy:*)",
+      "Bash(export CLOUDFLARE_API_TOKEN:*)",
+      "Bash(npx wrangler@latest pages deploy:*)",
+      "Bash($env:CLOUDFLARE_API_TOKEN=\"674f11fd5be4dbcc5fffe19e1b5cb7a554876\")",
+      "Bash(CLOUDFLARE_API_TOKEN=674f11fd5be4dbcc5fffe19e1b5cb7a554876 npx wrangler pages deploy:*)",
+      "Bash(CLOUDFLARE_API_TOKEN=qvkaapeIoflYHIA5uQWHBYaOLCZKOpAUCSlVwpt9 npx wrangler pages deploy:*)",
+      "Bash(CLOUDFLARE_API_TOKEN=qvkaapeIoflYHIA5uQWHBYaOLCZKOpAUCSlVwpt9 npx wrangler:*)",
+      "Bash(CLOUDFLARE_API_TOKEN=qvkaapeIoflYHIA5uQWHBYaOLCZKOpAUCSlVwpt9 curl -X GET \"https://api.cloudflare.com/client/v4/zones?name=tagmaster.dev\" -H \"Authorization: Bearer qvkaapeIoflYHIA5uQWHBYaOLCZKOpAUCSlVwpt9\" -H \"Content-Type: application/json\")",
+      "Bash(curl:*)",
+      "Bash(dir:*)",
+      "Bash(zip:*)",
+      "Bash(rd /s /q \"C:\\\\Users\\\\Huseyin\\\\Desktop\\\\Google Swiss Knife\\\\devtools\")",
+      "Bash(git reset:*)",
+      "Bash(git rm:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(node:*)",
+      "WebFetch(domain:andoutdoor.com)",
+      "Bash(git checkout:*)",
+      "Bash(ls:*)",
+      "Bash(export CLOUDFLARE_API_TOKEN=\"ttmUjRcZ5jZfw9fiDBAEfr71Zqy9C8wNAqeiSklk\")",
+      "Bash(git config:*)"
     ]
   }
 }

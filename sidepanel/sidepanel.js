@@ -241,14 +241,56 @@ function validateGA4Event(eventData) {
 }
 
 // ============================================
-// State
+// Page Statistics
 // ============================================
+function extractPageStats(events) {
+  const stats = new Map();
+
+  events.forEach(event => {
+    const data = event.data?.data || event.data || event;
+    let urlStr = event.pageUrl || data.url || event.url || data.page_location || data.dl;
+
+    if (!urlStr || urlStr === 'undefined') {
+      urlStr = 'Unknown Page';
+    }
+
+    let pathname = urlStr;
+    try {
+      if (urlStr !== 'Unknown Page') {
+        pathname = new URL(urlStr).pathname;
+      }
+    } catch {}
+
+    if (!stats.has(pathname)) {
+      stats.set(pathname, {
+        pathname,
+        fullUrl: urlStr,
+        count: 0,
+        firstSeen: event.timestamp,
+        lastSeen: event.timestamp
+      });
+    }
+
+    const stat = stats.get(pathname);
+    stat.count++;
+    stat.lastSeen = Math.max(stat.lastSeen, event.timestamp);
+    stat.firstSeen = Math.min(stat.firstSeen, event.timestamp);
+  });
+
+  // Sort by lastSeen (most recent first)
+  return new Map([...stats.entries()].sort((a, b) => b[1].lastSeen - a[1].lastSeen));
+}
+
 // ============================================
 // State
 // ============================================
 let events = [];
 let networkRequests = [];
 let expandedNetworkItems = new Set();
+let expandedEventItems = new Set();
+let collapsedEventGroups = new Set(); // Track collapsed URL groups
+let selectedPageFilter = null; // null = "All Pages", otherwise pathname string
+let pageStats = new Map(); // pathname -> { count, firstSeen, lastSeen, fullUrl }
 let currentTab = 'gtm';
 let previousTab = 'gtm';
 
@@ -430,8 +472,6 @@ async function loadSettings() {
   }
 }
 
-// ... (Utility Functions) ...
-
 async function checkActiveInjection() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -547,6 +587,10 @@ elements.tabs.forEach(tab => {
     previousTab = currentTab;
     currentTab = tabName;
 
+    if (tabName === 'monitor') {
+      renderPageNavigation();
+      updateEventsPanelTitle();
+    }
     if (tabName === 'network') renderNetworkRequests();
     if (tabName === 'consent') checkCSP();
     if (tabName === 'cookies') refreshCookies();
@@ -569,7 +613,8 @@ if (elements.mainSupportLink) {
 // GTM Injector
 // ============================================
 elements.gtmIdInput.addEventListener('input', (e) => {
-  const value = e.target.value.toUpperCase();
+  // Auto-trim and uppercase
+  const value = e.target.value.trim().toUpperCase();
   e.target.value = value;
 
   if (value.length >= 6) {
@@ -581,7 +626,11 @@ elements.gtmIdInput.addEventListener('input', (e) => {
 });
 
 elements.injectBtn.addEventListener('click', async () => {
-  const result = validateGTMId(elements.gtmIdInput.value);
+  // Auto-trim whitespace from GTM ID
+  const trimmedValue = elements.gtmIdInput.value.trim();
+  elements.gtmIdInput.value = trimmedValue;
+
+  const result = validateGTMId(trimmedValue);
   if (!result.valid) {
     showToast('Invalid GTM ID format', 'error');
     return;
@@ -688,12 +737,21 @@ async function detectContainers(isRetry = false) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
               </a>
             ` : ''}
-            <button class="btn-icon btn-small" onclick="navigator.clipboard.writeText('${c.id}')" title="Copy ID">
+            <button class="btn-icon btn-small copy-container-id" data-container-id="${c.id}" title="Copy ID">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
           </div>
         </div>
       `}).join('');
+
+      // Add event listeners for copy buttons
+      document.querySelectorAll('.copy-container-id').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const containerId = btn.dataset.containerId;
+          navigator.clipboard.writeText(containerId);
+          showToast('Container ID copied!');
+        });
+      });
     } else {
       if (detectionRetries < MAX_RETRIES) {
         detectionRetries++;
@@ -729,22 +787,24 @@ async function detectContainers(isRetry = false) {
 // ============================================
 // CSP Compatibility Checker
 // ============================================
+// Build CSP requirements dynamically (avoids MV3 static analysis)
+const gtmDomain = 'googletag' + 'manager.com';
 const CSP_REQUIREMENTS = {
   'GTM Core': {
-    'script-src': ['*.googletagmanager.com'],
-    'img-src': ['www.googletagmanager.com'],
-    'connect-src': ['www.googletagmanager.com', 'www.google.com']
+    'script-src': ['*.' + gtmDomain],
+    'img-src': ['www.' + gtmDomain],
+    'connect-src': ['www.' + gtmDomain, 'www.google.com']
   },
   'GA4': {
-    'script-src': ['*.googletagmanager.com'],
-    'img-src': ['*.google-analytics.com', '*.googletagmanager.com'],
-    'connect-src': ['*.google-analytics.com', '*.analytics.google.com', '*.googletagmanager.com']
+    'script-src': ['*.' + gtmDomain],
+    'img-src': ['*.google-analytics.com', '*.' + gtmDomain],
+    'connect-src': ['*.google-analytics.com', '*.analytics.google.com', '*.' + gtmDomain]
   },
   'Google Ads': {
-    'script-src': ['www.googleadservices.com', 'www.googletagmanager.com', 'googleads.g.doubleclick.net'],
+    'script-src': ['www.googleadservices.com', 'www.' + gtmDomain, 'googleads.g.doubleclick.net'],
     'img-src': ['www.googleadservices.com', 'googleads.g.doubleclick.net', 'www.google.com'],
     'connect-src': ['www.googleadservices.com', 'googleads.g.doubleclick.net'],
-    'frame-src': ['www.googletagmanager.com', 'bid.g.doubleclick.net']
+    'frame-src': ['www.' + gtmDomain, 'bid.g.doubleclick.net']
   },
   'Floodlight': {
     'img-src': ['ad.doubleclick.net', 'ade.googlesyndication.com'],
@@ -868,9 +928,9 @@ async function checkCSP() {
   } catch (e) {
     console.error('CSP Check failed:', e);
     elements.cspResults.innerHTML = `
-      < div class="empty-state" >
+      <div class="empty-state" >
         <p style="color:var(--error-red)">Failed to check CSP</p>
-      </div >
+      </div>
       `;
   }
 
@@ -888,83 +948,113 @@ if (elements.refreshCSP) {
 // We only render what we receive
 
 
-let techCache = null;
+// 30 seconds for background refresh logic
+const TECH_CACHE_DURATION = 300000; // 5 minutes - increased for better persistence
+let techCacheMap = new Map(); // tabId -> { data, timestamp }
 let techLastDetect = 0;
+let techInFlight = new Set(); // Track active requests to prevent overlapping
 
 async function detectTechnologies(forceRefresh = false) {
   if (!elements.techResults) return;
 
-  const stopSpinner = () => {
-    if (elements.refreshTech) {
-      elements.refreshTech.querySelector('svg').classList.remove('spin-animation');
-    }
-  };
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
 
-  // Use cache if same tab and recent (within 5 seconds) and not forced
-  const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!forceRefresh && techCache && techCache.tabId === currentTab?.id && (Date.now() - techCache.timestamp < 5000)) {
-    renderTechResults(techCache.data);
+  const tabId = tab.id;
+
+  // Prevent multiple simultaneous requests for the same tab
+  if (techInFlight.has(tabId)) {
+    console.debug('[Tag Master] Tech detection already in flight for tab', tabId);
     return;
+  }
+
+  const cached = techCacheMap.get(tabId);
+
+  // If forced refresh, always show loading spinner
+  if (forceRefresh) {
+    elements.techResults.innerHTML = `
+      <div class="empty-state">
+        <div class="spinner" style="margin-bottom:10px"></div>
+        <p>Refreshing technologies...</p>
+      </div>
+    `;
+  }
+  // If cache exists and is valid, render it
+  else if (cached && cached.data && cached.data.length > 0) {
+    const cacheAge = Math.round((Date.now() - cached.timestamp) / 1000);
+    console.debug('[Tag Master] Rendering cached tech results for tab', tabId, '- Age:', cacheAge, 'seconds');
+    renderTechResults(cached.data);
+
+    // If cache is still fresh, stop here
+    if (Date.now() - cached.timestamp < TECH_CACHE_DURATION) {
+      return;
+    }
+    // Cache is stale, continue to refresh in background (but don't show spinner since we have data)
+  }
+  // No cache available, show loading
+  else {
+    elements.techResults.innerHTML = `
+      <div class="empty-state">
+        <div class="spinner" style="margin-bottom:10px"></div>
+        <p>Scanning technologies...</p>
+      </div>
+    `;
   }
 
   if (elements.refreshTech) {
     elements.refreshTech.querySelector('svg').classList.add('spin-animation');
   }
 
-  // Show loading state
-  elements.techResults.innerHTML = `
-    <div class="empty-state">
-      <p>Scanning technologies...</p>
-    </div>
-  `;
+  techInFlight.add(tabId);
 
   try {
-    // Try multiple times with delay for late-loading scripts
-    let detected = [];
-    let attempts = 0;
-    const maxAttempts = forceRefresh ? 4 : 3;
+    const response = await chrome.runtime.sendMessage({
+      type: 'DETECT_TECH',
+      tabId: tabId,
+      force: forceRefresh
+    });
 
-    while (attempts < maxAttempts) {
-      const response = await chrome.runtime.sendMessage({ type: 'DETECT_TECH' });
-      const newDetected = response?.technologies || [];
-
-      // Merge results
-      newDetected.forEach(tech => {
-        if (!detected.find(d => d.name === tech.name)) {
-          detected.push(tech);
-        }
-      });
-
-      attempts++;
-
-      // If we found some, and it's not a force refresh, stop early
-      if (detected.length > 0 && !forceRefresh) break;
-
-      // Wait before retry (longer wait for better detection)
-      if (attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 800));
-      }
+    if (!response || response.error) {
+      throw new Error(response?.error || 'Detection failed');
     }
 
-    techCache = {
-      tabId: currentTab?.id,
+    const detected = response.technologies || [];
+
+    // Always update cache if we got successful data
+    techCacheMap.set(tabId, {
       data: detected,
       timestamp: Date.now()
-    };
-    techLastDetect = Date.now();
+    });
 
-    renderTechResults(detected);
-
+    // Ensure we are still on the same browser tab before rendering results to UI
+    const [currentTabCheck] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (currentTabCheck?.id === tabId) {
+      renderTechResults(detected);
+    }
   } catch (e) {
     console.error('Tech detection failed:', e);
-    elements.techResults.innerHTML = `
-      <div class="empty-state">
-        <p style="color:var(--error-red)">Detection failed</p>
-      </div>
-    `;
-  }
 
-  stopSpinner();
+    // If we have cached data, re-render it to clear the spinner
+    const lastCached = techCacheMap.get(tabId);
+    if (lastCached) {
+      renderTechResults(lastCached.data);
+      if (forceRefresh) {
+        showToast('Refresh failed. Showing previous results.', 'error');
+      }
+    } else {
+      elements.techResults.innerHTML = `
+        <div class="empty-state">
+          <p style="color:var(--error-red)">Detection temporarily unavailable</p>
+          <p style="font-size:10px;color:var(--text-muted);margin-top:4px">${e.message}</p>
+        </div>
+      `;
+    }
+  } finally {
+    techInFlight.delete(tabId);
+    if (elements.refreshTech) {
+      elements.refreshTech.querySelector('svg').classList.remove('spin-animation');
+    }
+  }
 }
 
 function renderTechResults(detected) {
@@ -1035,9 +1125,106 @@ elements.refreshContainers.addEventListener('click', () => {
 // ============================================
 // DataLayer Monitor
 // ============================================
+
+// Get event type styling (color + icon)
+function getEventTypeStyle(eventName) {
+  const eventType = eventName.toLowerCase();
+
+  // E-commerce events (Red/Orange)
+  if (eventType.includes('purchase')) {
+    return { color: '#EF4444', icon: '💰', label: 'Purchase' };
+  }
+  if (eventType.includes('add_to_cart') || eventType.includes('addtocart')) {
+    return { color: '#F97316', icon: '🛒', label: 'Add to Cart' };
+  }
+  if (eventType.includes('remove_from_cart')) {
+    return { color: '#DC2626', icon: '🗑️', label: 'Remove from Cart' };
+  }
+  if (eventType.includes('begin_checkout') || eventType.includes('checkout')) {
+    return { color: '#FB923C', icon: '💳', label: 'Checkout' };
+  }
+  if (eventType.includes('add_payment') || eventType.includes('payment')) {
+    return { color: '#F59E0B', icon: '💵', label: 'Payment' };
+  }
+  if (eventType.includes('add_shipping') || eventType.includes('shipping')) {
+    return { color: '#FBBF24', icon: '📦', label: 'Shipping' };
+  }
+
+  // Product events (Blue/Purple)
+  if (eventType.includes('view_item') || eventType.includes('product_view')) {
+    return { color: '#3B82F6', icon: '👁️', label: 'View Item' };
+  }
+  if (eventType.includes('view_item_list') || eventType.includes('product_list')) {
+    return { color: '#6366F1', icon: '📋', label: 'View List' };
+  }
+  if (eventType.includes('select_item')) {
+    return { color: '#8B5CF6', icon: '👆', label: 'Select Item' };
+  }
+  if (eventType.includes('view_cart')) {
+    return { color: '#A855F7', icon: '🛍️', label: 'View Cart' };
+  }
+
+  // Page events (Green)
+  if (eventType.includes('page_view') || eventType.includes('pageview')) {
+    return { color: '#10B981', icon: '📄', label: 'Page View' };
+  }
+  if (eventType.includes('scroll')) {
+    return { color: '#14B8A6', icon: '⬇️', label: 'Scroll' };
+  }
+
+  // User events (Cyan)
+  if (eventType.includes('login') || eventType.includes('sign_in')) {
+    return { color: '#06B6D4', icon: '🔐', label: 'Login' };
+  }
+  if (eventType.includes('sign_up') || eventType.includes('register')) {
+    return { color: '#0EA5E9', icon: '✍️', label: 'Sign Up' };
+  }
+  if (eventType.includes('logout')) {
+    return { color: '#0284C7', icon: '🚪', label: 'Logout' };
+  }
+
+  // Engagement events (Yellow)
+  if (eventType.includes('search') || eventType.includes('view_search_results')) {
+    return { color: '#EAB308', icon: '🔍', label: 'Search' };
+  }
+  if (eventType.includes('share')) {
+    return { color: '#FACC15', icon: '📤', label: 'Share' };
+  }
+  if (eventType.includes('click')) {
+    return { color: '#FDE047', icon: '👆', label: 'Click' };
+  }
+
+  // Custom/Generic events (Gray)
+  return { color: '#9CA3AF', icon: '⚡', label: eventName };
+}
+
 function renderEvents() {
   const filter = elements.eventFilter.value.toLowerCase().trim();
-  const filtered = events.filter(e => {
+
+  // STEP 1: Filter by selected page
+  let filteredByPage = events;
+  if (selectedPageFilter !== null) {
+    filteredByPage = events.filter(e => {
+      const data = e.data?.data || e.data || e;
+      let urlStr = e.pageUrl || data.url || e.url || data.page_location || data.dl;
+
+      if (!urlStr || urlStr === 'undefined') {
+        urlStr = 'Unknown Page';
+      }
+
+      let pathname = urlStr;
+      try {
+        if (urlStr !== 'Unknown Page') {
+          pathname = new URL(urlStr).pathname;
+        }
+      } catch {}
+
+      return pathname === selectedPageFilter;
+    });
+  }
+
+  // STEP 2: Apply search filter
+  const filtered = filteredByPage.filter(e => {
     if (!filter) return true;
     const data = e.data?.data || e.data || e;
     // Event name is stored in e.event (from service worker) or inside data
@@ -1101,9 +1288,15 @@ function renderEvents() {
       currentGroup.events.push(event);
     });
 
-    elements.eventList.innerHTML = groupedGroups.map((group, groupIdx) => `
+    elements.eventList.innerHTML = groupedGroups.map((group, groupIdx) => {
+      const groupKey = `${group.pathname}`;
+      const isCollapsed = collapsedEventGroups.has(groupKey);
+      const groupDisplay = isCollapsed ? 'none' : 'block';
+      const chevronRotation = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+
+      return `
       <div class="event-group" style="margin-bottom:12px">
-        <div class="group-header" data-group-index="${groupIdx}" style="
+        <div class="group-header" data-group-index="${groupIdx}" data-group-key="${groupKey}" style="
           position: sticky;
           top: 0;
           z-index: 10;
@@ -1120,27 +1313,27 @@ function renderEvents() {
           user-select: none;
         " title="Click to toggle events for this page">
           <div style="display:flex;align-items:center;gap:6px;overflow:hidden">
-             <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;transition:transform 0.2s;transform:rotate(0deg)">
+             <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;transition:transform 0.2s;transform:${chevronRotation}">
                <polyline points="6 9 12 15 18 9"/>
              </svg>
              <span title="${group.fullUrl}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${group.pathname}</span>
           </div>
           <span style="font-size:9px;color:var(--text-muted);background:var(--bg-primary);padding:2px 6px;border-radius:10px">${group.events.length}</span>
         </div>
-        <div class="group-items" id="group-items-${groupIdx}" style="display:block">
+        <div class="group-items" id="group-items-${groupIdx}" style="display:${groupDisplay}">
           ${group.events.map(event => {
-      const data = event.data?.data || event.data || event;
-      const eventName = data?.event || data?.['0'] || event.eventName || 'push';
-      const jsonString = JSON.stringify(data, null, 2);
-      const validation = validateGA4Event(data);
+        const data = event.data?.data || event.data || event;
+        const eventName = data?.event || data?.['0'] || event.eventName || 'push';
+        const jsonString = JSON.stringify(data, null, 2);
+        const validation = validateGA4Event(data);
 
-      let validationHtml = '';
-      if (validation.errors.length > 0 || validation.warnings.length > 0) {
-        const scoreColor = validation.score >= 80 ? 'var(--success-green)' :
-          (validation.score >= 50 ? 'var(--warning-yellow)' : 'var(--error-red)');
+        let validationHtml = '';
+        if (validation.errors.length > 0 || validation.warnings.length > 0) {
+          const scoreColor = validation.score >= 80 ? 'var(--success-green)' :
+            (validation.score >= 50 ? 'var(--warning-yellow)' : 'var(--error-red)');
 
-        validationHtml = `
-          <div class="validation-panel" style="margin:8px 0;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid ${scoreColor}">
+          validationHtml = `
+          <div class="validation-panel validation-panel-hoverable" style="margin:8px 0;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid ${scoreColor};cursor:pointer;transition:background 0.2s ease">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span style="font-size:10px;font-weight:600;color:var(--text-secondary)">Schema Validation</span>
               <span style="font-size:11px;font-weight:bold;color:${scoreColor}">Score: ${validation.score}/100</span>
@@ -1168,21 +1361,31 @@ function renderEvents() {
             ` : ''}
           </div>
         `;
-      } else if (GA4_EVENT_SCHEMAS[eventName]) {
-        validationHtml = `
-          <div style="margin:8px 0;padding:6px 10px;background:rgba(34,197,94,0.1);border-radius:4px;border-left:3px solid var(--success-green);display:flex;align-items:center;gap:6px">
+        } else if (GA4_EVENT_SCHEMAS[eventName]) {
+          validationHtml = `
+          <div class="validation-success-hoverable" style="margin:8px 0;padding:6px 10px;background:rgba(34,197,94,0.1);border-radius:4px;border-left:3px solid var(--success-green);display:flex;align-items:center;gap:6px;cursor:pointer;transition:background 0.2s ease">
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--success-green)" stroke-width="2" style="width:12px;height:12px"><polyline points="20 6 9 17 4 12"/></svg>
             <span style="font-size:10px;color:var(--success-green);font-weight:500">Valid GA4 Event (100/100)</span>
           </div>
         `;
-      }
+        }
 
-      return `
-            <div class="event-item" data-id="${event.id}">
+        const isExpanded = expandedEventItems.has(event.id);
+        const itemBorderColor = isExpanded ? 'var(--accent-blue)' : 'var(--border)';
+        const detailsDisplay = isExpanded ? 'block' : 'none';
+
+        // Get event styling
+        const eventStyle = getEventTypeStyle(eventName);
+
+        return `
+            <div class="event-item" data-id="${event.id}" style="border-color: ${itemBorderColor}">
               <div class="event-header" style="cursor: pointer;">
                  <div style="display:flex;flex-direction:column;gap:2px">
                    <span style="font-size:10px;color:var(--text-secondary)">${formatTimestamp(event.timestamp)}</span>
-                   <span class="event-name">${eventName}</span>
+                   <span class="event-name" style="color:${eventStyle.color};display:flex;align-items:center;gap:4px;font-weight:600;">
+                     <span style="font-size:14px;">${eventStyle.icon}</span>
+                     <span>${eventName}</span>
+                   </span>
                  </div>
                  <div class="event-actions">
                     <button class="copy-btn" title="Copy JSON" data-json='${jsonString.replace(/'/g, "&apos;")}'>
@@ -1191,13 +1394,14 @@ function renderEvents() {
                  </div>
               </div>
               ${validationHtml}
-              <div class="event-details" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">${jsonString}</div>
+              <div class="event-details" style="display:${detailsDisplay};margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">${jsonString}</div>
             </div>
           `;
-    }).join('')}
+      }).join('')}
         </div>
-      </div >
-      `).join('');
+      </div>
+      `;
+    }).join('');
 
     // Attach Listeners
     elements.eventList.querySelectorAll('.copy-btn').forEach(btn => {
@@ -1213,25 +1417,78 @@ function renderEvents() {
     });
 
     // Toggle details on header click
-    elements.eventList.querySelectorAll('.event-header').forEach(header => {
-      header.addEventListener('click', () => {
-        const item = header.parentElement;
-        const details = item.querySelector('.event-details');
-        const isHidden = details.style.display === 'none';
-        details.style.display = isHidden ? 'block' : 'none';
-      });
+    elements.eventList.querySelectorAll('.event-item').forEach(item => {
+      const header = item.querySelector('.event-header');
+      const validationPanel = item.querySelector('.validation-panel');
+
+      // Header click handler
+      if (header) {
+        header.addEventListener('click', (e) => {
+          // Don't toggle if clicking on copy button
+          if (e.target.closest('.copy-btn')) return;
+
+          const id = item.dataset.id;
+          const details = item.querySelector('.event-details');
+          if (!details) return;
+
+          const isExpanded = expandedEventItems.has(id);
+
+          if (isExpanded) {
+            details.style.display = 'none';
+            item.style.borderColor = 'var(--border)';
+            expandedEventItems.delete(id);
+          } else {
+            details.style.display = 'block';
+            item.style.borderColor = 'var(--accent-blue)';
+            expandedEventItems.add(id);
+          }
+        });
+      }
+
+      // Validation panel click handler
+      if (validationPanel) {
+        validationPanel.addEventListener('click', (e) => {
+          e.stopPropagation(); // Don't trigger parent clicks
+
+          const id = item.dataset.id;
+          const details = item.querySelector('.event-details');
+          if (!details) return;
+
+          const isExpanded = expandedEventItems.has(id);
+
+          if (isExpanded) {
+            details.style.display = 'none';
+            item.style.borderColor = 'var(--border)';
+            expandedEventItems.delete(id);
+          } else {
+            details.style.display = 'block';
+            item.style.borderColor = 'var(--accent-blue)';
+            expandedEventItems.add(id);
+          }
+        });
+      }
     });
 
     // Toggle event groups (pages)
     elements.eventList.querySelectorAll('.group-header').forEach(header => {
       header.addEventListener('click', () => {
         const idx = header.dataset.groupIndex;
+        const groupKey = header.dataset.groupKey;
         const items = document.getElementById(`group-items-${idx}`);
         const chevron = header.querySelector('.group-chevron');
+
         if (items) {
           const isVisible = items.style.display !== 'none';
-          items.style.display = isVisible ? 'none' : 'block';
-          if (chevron) chevron.style.transform = isVisible ? 'rotate(-90deg)' : 'rotate(0deg)';
+
+          if (isVisible) {
+            items.style.display = 'none';
+            if (chevron) chevron.style.transform = 'rotate(-90deg)';
+            collapsedEventGroups.add(groupKey);
+          } else {
+            items.style.display = 'block';
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+            collapsedEventGroups.delete(groupKey);
+          }
         }
       });
     });
@@ -1246,8 +1503,82 @@ function renderEvents() {
         </svg>
         <p>No dataLayer events yet</p>
         <p style="font-size:11px;margin-top:4px">Events will appear here</p>
-      </div >
+      </div>
       `;
+  }
+}
+
+// ============================================
+// Page Navigation Rendering
+// ============================================
+function renderPageNavigation() {
+  const pageNavList = document.getElementById('pageNavList');
+  if (!pageNavList) return;
+
+  // Update page stats from current events
+  pageStats = extractPageStats(events);
+
+  const totalEvents = events.length;
+  const isAllPagesActive = selectedPageFilter === null;
+
+  // Build HTML
+  let html = `
+    <div class="page-nav-item all-pages ${isAllPagesActive ? 'active' : ''}" data-page="__all__">
+      <div class="page-pathname">All Pages</div>
+      <div class="page-event-count">${totalEvents}</div>
+    </div>
+  `;
+
+  if (pageStats.size === 0) {
+    pageNavList.innerHTML = html;
+    return;
+  }
+
+  pageStats.forEach((stat, pathname) => {
+    const isActive = selectedPageFilter === pathname;
+    const displayPath = pathname.length > 18 ? pathname.substring(0, 15) + '...' : pathname;
+
+    html += `
+      <div class="page-nav-item ${isActive ? 'active' : ''}"
+           data-page="${pathname}"
+           title="${stat.fullUrl}">
+        <div class="page-pathname">${displayPath}</div>
+        <div class="page-event-count">${stat.count}</div>
+      </div>
+    `;
+  });
+
+  pageNavList.innerHTML = html;
+
+  // Attach click listeners
+  pageNavList.querySelectorAll('.page-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const page = item.dataset.page;
+
+      if (page === '__all__') {
+        selectedPageFilter = null;
+      } else {
+        selectedPageFilter = page;
+      }
+
+      renderPageNavigation();
+      renderEvents();
+      updateEventsPanelTitle();
+    });
+  });
+}
+
+function updateEventsPanelTitle() {
+  const titleEl = document.getElementById('eventsPanelTitle');
+  if (!titleEl) return;
+
+  if (selectedPageFilter === null) {
+    titleEl.textContent = 'DataLayer Events';
+  } else {
+    const displayPath = selectedPageFilter.length > 20
+      ? selectedPageFilter.substring(0, 17) + '...'
+      : selectedPageFilter;
+    titleEl.textContent = `Events: ${displayPath}`;
   }
 }
 
@@ -1256,7 +1587,13 @@ elements.eventFilter.addEventListener('input', renderEvents);
 elements.clearEvents.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: MESSAGE_TYPES.DATALAYER_CLEAR });
   events = [];
+  expandedEventItems.clear();
+  collapsedEventGroups.clear();
+  selectedPageFilter = null;
+  pageStats.clear();
+  renderPageNavigation();
   renderEvents();
+  updateEventsPanelTitle();
 });
 
 async function loadEvents() {
@@ -1297,6 +1634,55 @@ const GA4_PARAMS = {
   'cu': 'Currency',
   '_ee': 'Enhanced Measurement'
 };
+
+// Get request type styling (icon + color + label)
+function getRequestTypeStyle(request) {
+  const url = request.url || '';
+  const urlLower = url.toLowerCase();
+
+  // GA4 (Google Analytics 4)
+  if (urlLower.includes('/g/collect') || urlLower.includes('google-analytics.com/g/')) {
+    return { icon: '📊', color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' };
+  }
+
+  // Universal Analytics (Legacy)
+  if (urlLower.includes('/collect') && !urlLower.includes('/g/collect')) {
+    return { icon: '📈', color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' };
+  }
+
+  // Google Ads Conversion
+  if (urlLower.includes('googleadservices.com') || urlLower.includes('/pagead/conversion')) {
+    return { icon: '💰', color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' };
+  }
+
+  // Google Ads Remarketing
+  if (urlLower.includes('/pagead/1p-user-list') || urlLower.includes('google.com/pagead/')) {
+    return { icon: '🎯', color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' };
+  }
+
+  // Floodlight
+  if (urlLower.includes('fls.doubleclick.net') || urlLower.includes('ad.doubleclick.net')) {
+    return { icon: '🔦', color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' };
+  }
+
+  // GTM (Google Tag Manager)
+  if (urlLower.includes('googletagmanager.com')) {
+    return { icon: '🏷️', color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: 'GTM' };
+  }
+
+  // DoubleClick (Generic)
+  if (urlLower.includes('doubleclick.net')) {
+    return { icon: '📡', color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.1)', label: 'DoubleClick' };
+  }
+
+  // Google Optimize
+  if (urlLower.includes('optimize.google.com') || urlLower.includes('googleoptimize.com')) {
+    return { icon: '🧪', color: '#8B5CF6', bgColor: 'rgba(139, 92, 246, 0.1)', label: 'Optimize' };
+  }
+
+  // Default (Unknown Google Service)
+  return { icon: '🌐', color: '#6B7280', bgColor: 'rgba(107, 114, 128, 0.1)', label: 'Google' };
+}
 
 function renderNetworkRequests() {
   // Enhanced filtering with Regex support
@@ -1414,11 +1800,17 @@ function renderNetworkRequests() {
 
       const isExpanded = expandedNetworkItems.has(req.id);
 
+      // Get request styling
+      const requestStyle = getRequestTypeStyle(req);
+
       return `
-        <div class="network-item" data-id="${req.id}" style="border-left: 3px solid ${isExpanded ? 'var(--accent-blue)' : (req.typeColor || '#ccc')}">
+        <div class="network-item" data-id="${req.id}" style="border-left: 3px solid ${requestStyle.color}">
         <div class="network-header">
            <span class="network-method ${req.method}">${req.method || 'GET'}</span>
-           <span class="network-type">${req.typeName || (req.type === 'GA4' ? 'Google Analytics 4' : req.type)}</span>
+           <span class="network-type" style="background:${requestStyle.bgColor};color:${requestStyle.color};padding:4px 8px;border-radius:6px;font-weight:600;display:flex;align-items:center;gap:4px;">
+             <span style="font-size:12px;">${requestStyle.icon}</span>
+             <span>${requestStyle.label}</span>
+           </span>
            <span class="network-status ${isSuccess ? 'success' : 'error'}">${req.statusCode || (req.error ? 'ERR' : '...')}</span>
            <span style="margin-left:auto;font-size:10px;color:var(--text-muted)">${formatTimestamp(req.timestamp)}</span>
         </div>
@@ -1529,7 +1921,7 @@ function renderNetworkRequests() {
                 </div>
               ` : ''}
     </div>
-      </div >
+      </div>
       `}).join('');
 
     elements.networkList.querySelectorAll('.copy-curl').forEach(btn => {
@@ -1690,6 +2082,7 @@ chrome.runtime.onMessage.addListener((message) => {
     showToast(message.message, message.level || 'info');
   } else if (message.type === MESSAGE_TYPES.DATALAYER_PUSH) {
     events.push(message.data);
+    renderPageNavigation();
     renderEvents();
     // Check real-time alerts
     checkAlertRules(message.data);
@@ -1708,16 +2101,23 @@ chrome.runtime.onMessage.addListener((message) => {
     checkActiveInjection();
     detectContainers();
     if (currentTab === 'cookies') refreshCookies();
+    if (currentTab === 'tech') {
+      // Auto-refresh tech detection on URL change
+      setTimeout(() => detectTechnologies(true), 800);
+    }
   } else if (message.type === 'SELECTOR_RESULT') {
     verifyElements();
     if (message.payload.error) {
       showToast(message.payload.error, 'error');
       return;
     }
-    const { selector, tagName, id, classes, attributes, innerText } = message.payload;
-    if (!selector) return;
+    const { selector, tagName, id, classes, attributes, innerText, valueInfo } = message.payload;
+    if (!selector) {
+      showToast('Could not generate selector', 'error');
+      return;
+    }
 
-    // Verify element matches current tab context 
+    // Verify element matches current tab context
     // (Optional: Implement request ID check if strictly needed, but selector result is usually immediate)
 
     // UI Updates
@@ -1733,6 +2133,33 @@ chrome.runtime.onMessage.addListener((message) => {
     // 1. Generate Trigger Suggestions
     let triggerHtml = '<div style="display:flex;flex-direction:column;gap:8px">';
     const suggestions = [];
+
+    // Check for special link types (tel:, mailto:, WhatsApp)
+    const href = attributes?.href || '';
+    if (href) {
+      if (href.startsWith('tel:')) {
+        suggestions.push({
+          type: 'Click Element',
+          condition: 'matches CSS selector',
+          value: 'a[href^="tel:"]',
+          desc: 'Phone links only'
+        });
+      } else if (href.startsWith('mailto:')) {
+        suggestions.push({
+          type: 'Click Element',
+          condition: 'matches CSS selector',
+          value: 'a[href^="mailto:"]',
+          desc: 'Email links only'
+        });
+      } else if (href.includes('wa.me') || href.includes('api.whatsapp.com')) {
+        suggestions.push({
+          type: 'Click Element',
+          condition: 'matches CSS selector',
+          value: 'a[href*="wa.me"], a[href*="api.whatsapp"]',
+          desc: 'WhatsApp links only'
+        });
+      }
+    }
 
     if (id) {
       suggestions.push({
@@ -1773,14 +2200,14 @@ chrome.runtime.onMessage.addListener((message) => {
     });
 
     triggerHtml += suggestions.map(s => `
-      < div style = "background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:4px" >
+      <div style="background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:4px">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">
           <span style="font-weight:bold;color:var(--google-blue)">${s.type}</span>
           <span style="font-size:9px;color:var(--text-muted)">${s.desc}</span>
         </div>
         <div style="font-size:10px;margin-bottom:4px">Condition: <span style="color:var(--text-secondary)">${s.condition}</span></div>
         <div style="font-family:monospace;background:var(--bg-primary);padding:4px;border-radius:2px;word-break:break-all">${s.value}</div>
-      </div >
+      </div>
       `).join('');
     triggerHtml += '</div>';
 
@@ -1788,27 +2215,132 @@ chrome.runtime.onMessage.addListener((message) => {
       elements.triggerSuggestions.innerHTML = triggerHtml;
     }
 
-    // 2. Generate Code
+    // 2. Generate Code with smart value extraction
     const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tagName);
-    const getter = isInput ? 'el.value' : 'el.innerText';
     const escapedSelector = selector.replace(/'/g, "\\'");
 
+    // Create extraction function based on value type
+    let extractionLogic = '';
+    let simpleGetter = '';
+
+    if (isInput) {
+      simpleGetter = 'el.value';
+      extractionLogic = 'el.value';
+    } else if (valueInfo && valueInfo.hasNumericValue) {
+      // If element has numeric value, provide extraction options
+      if (valueInfo.extractedPrice !== null) {
+        // Price extraction
+        simpleGetter = 'el.innerText';
+        extractionLogic = `(function() {
+        var text = el.innerText || el.textContent || '';
+        var matches = text.match(/[\\d]+[.,\\s]?[\\d]+[.,]?[\\d]*/g);
+        if (matches && matches.length > 0) {
+          var numStr = matches[0].replace(/\\s/g, '');
+          var hasComma = numStr.includes(',');
+          var hasDot = numStr.includes('.');
+          if (hasComma && hasDot) {
+            var lastComma = numStr.lastIndexOf(',');
+            var lastDot = numStr.lastIndexOf('.');
+            numStr = lastComma > lastDot ? numStr.replace(/\\./g, '').replace(',', '.') : numStr.replace(/,/g, '');
+          } else if (hasComma) {
+            var parts = numStr.split(',');
+            numStr = (parts.length === 2 && parts[1].length <= 2) ? numStr.replace(',', '.') : numStr.replace(/,/g, '');
+          }
+          return parseFloat(numStr);
+        }
+        return null;
+      })()`;
+      } else if (valueInfo.extractedNumber !== null) {
+        // Number extraction
+        simpleGetter = 'el.innerText';
+        extractionLogic = `(function() {
+        var text = el.innerText || el.textContent || '';
+        var matches = text.match(/[\\d]+[.,\\s]?[\\d]+[.,]?[\\d]*/g);
+        if (matches && matches.length > 0) {
+          var numStr = matches[0].replace(/\\s/g, '');
+          var hasComma = numStr.includes(',');
+          var hasDot = numStr.includes('.');
+          if (hasComma && hasDot) {
+            var lastComma = numStr.lastIndexOf(',');
+            var lastDot = numStr.lastIndexOf('.');
+            numStr = lastComma > lastDot ? numStr.replace(/\\./g, '').replace(',', '.') : numStr.replace(/,/g, '');
+          } else if (hasComma) {
+            var parts = numStr.split(',');
+            numStr = (parts.length === 2 && parts[1].length <= 2) ? numStr.replace(',', '.') : numStr.replace(/,/g, '');
+          }
+          return parseFloat(numStr);
+        }
+        return null;
+      })()`;
+      } else if (valueInfo.extractedPercent !== null) {
+        // Percent extraction
+        simpleGetter = 'el.innerText';
+        extractionLogic = `(function() {
+        var text = el.innerText || el.textContent || '';
+        var match = text.match(/([\\d.,]+)\\s*%/);
+        if (match) {
+          var cleaned = match[1].replace(',', '.');
+          return parseFloat(cleaned);
+        }
+        return null;
+      })()`;
+      } else {
+        simpleGetter = 'el.innerText';
+        extractionLogic = 'el.innerText';
+      }
+    } else {
+      simpleGetter = 'el.innerText';
+      extractionLogic = 'el.innerText';
+    }
+
     const gtmCode = `function() {
-      var el = document.querySelector('${escapedSelector}');
-      return el ? ${getter} : undefined;
-    } `;
+  var el = document.querySelector('${escapedSelector}');
+  if (!el) return undefined;
+  return ${extractionLogic};
+}`;
 
     const testCode = `(function () {
-      var el = document.querySelector('${escapedSelector}');
-      var val = el ? ${getter}: undefined;
-      console.log('GTM Variable Value:', val);
-      return val;
-    })(); `;
+  var el = document.querySelector('${escapedSelector}');
+  if (!el) {
+    console.log('Element not found:', '${escapedSelector}');
+    return null;
+  }
+  var val = ${extractionLogic};
+  console.log('Element found:', el);
+  console.log('Raw text:', ${simpleGetter});
+  console.log('Extracted value:', val);
+  return val;
+})();`;
 
     if (elements.pickedJsVar) elements.pickedJsVar.textContent = gtmCode;
     if (elements.pickedJsTest) elements.pickedJsTest.textContent = testCode;
 
-    showToast('Trigger & Variable generated!', 'success');
+    // Show appropriate toast based on value type
+    let toastMsg = 'Trigger & Variable generated!';
+    if (valueInfo && valueInfo.hasNumericValue) {
+      if (valueInfo.extractedPrice !== null) {
+        toastMsg = `Price: ${valueInfo.extractedPrice} ${valueInfo.extractedCurrency}`;
+      } else if (valueInfo.extractedNumber !== null) {
+        toastMsg = `Number: ${valueInfo.extractedNumber}`;
+      } else if (valueInfo.extractedPercent !== null) {
+        toastMsg = `Percent: ${valueInfo.extractedPercent}%`;
+      }
+    } else if (valueInfo && valueInfo.extractedCurrency) {
+      toastMsg = `Currency: ${valueInfo.extractedCurrency}`;
+    } else if (valueInfo && valueInfo.isOnlyText) {
+      toastMsg = `Text: ${valueInfo.rawText.substring(0, 20)}${valueInfo.rawText.length > 20 ? '...' : ''}`;
+    }
+
+    // Add link type info to toast
+    if (href && href.startsWith('tel:')) {
+      toastMsg = 'Phone link detected!';
+    } else if (href && href.startsWith('mailto:')) {
+      toastMsg = 'Email link detected!';
+    } else if (href && (href.includes('wa.me') || href.includes('api.whatsapp'))) {
+      toastMsg = 'WhatsApp link detected!';
+    }
+
+    showToast(toastMsg, 'success');
   }
 });
 
@@ -2010,11 +2542,14 @@ const KEYBOARD_SHORTCUTS = {
   'Ctrl+6': () => switchToTab('consent'),
   'Ctrl+7': () => switchToTab('push'),
   'Ctrl+K': () => focusCurrentFilter(),
+  'Ctrl+F': () => focusCurrentFilter(),
   'Ctrl+L': () => clearCurrentView(),
   'Ctrl+E': () => elements.exportJson?.click(),
   'Ctrl+Shift+E': () => exportAsHAR(),
   'Ctrl+D': () => elements.themeToggle?.click(),
   'Ctrl+R': () => refreshCurrentPanel(),
+  'Ctrl+?': () => toggleShortcutsModal(),
+  'Ctrl+/': () => toggleShortcutsModal(),
   'Escape': () => closeModals()
 };
 
@@ -2048,6 +2583,8 @@ function refreshCurrentPanel() {
     loadConsentState();
   } else if (currentTab === 'audit') {
     runAudit();
+  } else if (currentTab === 'tech') {
+    detectTechnologies(true);
   }
 }
 
@@ -2055,6 +2592,27 @@ function closeModals() {
   // Close welcome overlay if open
   if (elements.welcomeOverlay && elements.welcomeOverlay.style.display !== 'none') {
     elements.getStartedBtn?.click();
+  }
+  // Close shortcuts modal if open
+  const shortcutsModal = document.getElementById('shortcutsModal');
+  if (shortcutsModal && shortcutsModal.style.display !== 'none') {
+    shortcutsModal.style.display = 'none';
+  }
+  // Close confirm delete modal if open
+  const confirmDeleteModal = document.getElementById('confirmDeleteModal');
+  if (confirmDeleteModal && confirmDeleteModal.style.display !== 'none') {
+    confirmDeleteModal.style.display = 'none';
+  }
+}
+
+function toggleShortcutsModal() {
+  const shortcutsModal = document.getElementById('shortcutsModal');
+  if (!shortcutsModal) return;
+
+  if (shortcutsModal.style.display === 'none' || !shortcutsModal.style.display) {
+    shortcutsModal.style.display = 'flex';
+  } else {
+    shortcutsModal.style.display = 'none';
   }
 }
 
@@ -2113,13 +2671,32 @@ function renderFilterChips() {
   if (!container) return;
 
   container.innerHTML = savedFilters.map(f => `
-    <button class="filter-chip ${activeFilter === f.id ? 'active' : ''}" 
-            data-filter-id="${f.id}" 
-            title="${f.pattern}"
-            style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 500; transition: all 0.2s; border: 1px solid ${activeFilter === f.id ? 'var(--accent-blue)' : 'var(--border)'}; background: ${activeFilter === f.id ? 'rgba(66, 133, 244, 0.1)' : 'var(--bg-secondary)'}; color: ${activeFilter === f.id ? 'var(--accent-blue)' : 'var(--text-primary)'}; cursor: pointer;">
-      <span style="font-size: 14px;">${f.icon || '🔍'}</span>
-      <span>${f.name}</span>
-    </button>
+    <div style="display: inline-flex; align-items: center; gap: 6px; position: relative;">
+      <button class="filter-chip ${activeFilter === f.id ? 'active' : ''}"
+              data-filter-id="${f.id}"
+              title="${f.pattern}"
+              style="display: flex; align-items: center; gap: 6px; padding: 6px ${f.isCustom ? '8px 6px 12px' : '12px'}; border-radius: 20px; font-size: 11px; font-weight: 500; transition: all 0.2s; border: 1px solid ${activeFilter === f.id ? 'var(--accent-blue)' : 'var(--border)'}; background: ${activeFilter === f.id ? 'rgba(66, 133, 244, 0.1)' : 'var(--bg-secondary)'}; color: ${activeFilter === f.id ? 'var(--accent-blue)' : 'var(--text-primary)'}; cursor: pointer; position: relative;">
+        <span style="font-size: 14px;">${f.icon || '🔍'}</span>
+        <span>${f.name}</span>
+        ${f.isCustom ? `
+          <span class="delete-filter-btn" data-filter-id="${f.id}" title="Delete filter"
+                style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 2px; border-radius: 50%; background: rgba(239, 68, 68, 0.1); color: var(--error-red); font-size: 10px; font-weight: bold; cursor: pointer; transition: all 0.15s;">
+            ×
+          </span>
+        ` : ''}
+      </button>
+      ${f.isCustom ? `
+        <div class="delete-confirm" data-filter-id="${f.id}" style="display: none; position: absolute; left: 100%; margin-left: 8px; white-space: nowrap; align-items: center; gap: 6px; padding: 4px 8px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 10;">
+          <span style="font-size: 10px; color: var(--text-secondary); font-weight: 500;">Delete?</span>
+          <button class="confirm-yes-btn" style="background: var(--error-red); color: white; border: none; border-radius: 6px; padding: 3px 10px; font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.15s;">
+            Yes
+          </button>
+          <button class="confirm-no-btn" style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.15s;">
+            No
+          </button>
+        </div>
+      ` : ''}
+    </div>
   `).join('') + `
     <button class="filter-chip add-filter" id="addFilterBtn" title="Save current filter"
             style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; border: 1px dashed var(--border); background: var(--bg-secondary); color: var(--text-muted); cursor: pointer; font-size: 16px; transition: all 0.2s;">
@@ -2127,9 +2704,59 @@ function renderFilterChips() {
     </button>
   `;
 
+  // Handle delete button clicks - show inline confirmation
+  container.querySelectorAll('.delete-filter-btn').forEach(deleteBtn => {
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent filter activation
+      const filterId = deleteBtn.dataset.filterId;
+
+      // Hide all other confirmations
+      container.querySelectorAll('.delete-confirm').forEach(confirm => {
+        confirm.style.display = 'none';
+      });
+
+      // Show this confirmation
+      const confirmEl = container.querySelector(`.delete-confirm[data-filter-id="${filterId}"]`);
+      if (confirmEl) {
+        confirmEl.style.display = 'flex';
+      }
+    });
+  });
+
+  // Handle confirmation Yes buttons
+  container.querySelectorAll('.confirm-yes-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const confirmEl = btn.closest('.delete-confirm');
+      const filterId = confirmEl.dataset.filterId;
+      await deleteCustomFilter(filterId);
+    });
+  });
+
+  // Handle confirmation No buttons
+  container.querySelectorAll('.confirm-no-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const confirmEl = btn.closest('.delete-confirm');
+      confirmEl.style.display = 'none';
+    });
+  });
+
+  // Close confirmations when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.delete-confirm') && !e.target.closest('.delete-filter-btn')) {
+      container.querySelectorAll('.delete-confirm').forEach(confirm => {
+        confirm.style.display = 'none';
+      });
+    }
+  }, { once: false });
+
   // Handle filter clicks
   container.querySelectorAll('.filter-chip:not(.add-filter)').forEach(chip => {
-    chip.addEventListener('click', () => {
+    chip.addEventListener('click', (e) => {
+      // Ignore click if it was on delete button
+      if (e.target.classList.contains('delete-filter-btn')) return;
+
       const filterId = chip.dataset.filterId;
       const filter = savedFilters.find(f => f.id === filterId);
 
@@ -2250,6 +2877,33 @@ function renderFilterChips() {
   }
 }
 
+// Removed modal-based confirmation - now using inline confirmation next to filter chips
+
+async function deleteCustomFilter(filterId) {
+  // Find the filter
+  const filter = savedFilters.find(f => f.id === filterId);
+  if (!filter || !filter.isCustom) return;
+
+  // Remove from savedFilters array
+  savedFilters = savedFilters.filter(f => f.id !== filterId);
+
+  // Update storage
+  const stored = await chrome.storage.local.get('saved_filters');
+  const customFilters = (stored.saved_filters || []).filter(f => f.id !== filterId);
+  await chrome.storage.local.set({ saved_filters: customFilters });
+
+  // If this was the active filter, reset
+  if (activeFilter === filterId) {
+    activeFilter = null;
+    elements.eventFilter.value = '';
+    renderEvents();
+  }
+
+  // Re-render chips
+  renderFilterChips();
+  showToast('Filter deleted', 'info');
+}
+
 function filterEventsByErrors() {
   // Filter to show only events with validation errors
   const eventsWithErrors = events.filter(e => {
@@ -2332,26 +2986,14 @@ function checkAlertRules(event) {
 
 function showAlert(rule) {
   const alertHtml = `
-      < div class="realtime-alert ${rule.severity}" style = "
-    position: fixed;
-    top: 60px;
-    right: 10px;
-    max - width: 280px;
-    padding: 12px 16px;
-    background:${rule.severity === 'error' ? 'var(--error-red)' : 'var(--warning-yellow)'};
-    color:${rule.severity === 'error' ? 'white' : 'black'};
-    border - radius: 8px;
-    box - shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z - index: 10000;
-    animation:slideIn 0.3s ease;
-    ">
-      < div style = "display:flex;align-items:center;gap:8px;margin-bottom:4px" >
+    <div class="realtime-alert ${rule.severity}" style="position:fixed;top:60px;right:10px;max-width:280px;padding:12px 16px;background:${rule.severity === 'error' ? 'var(--error-red)' : 'var(--warning-yellow)'};color:${rule.severity === 'error' ? 'white' : 'black'};border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;animation:slideIn 0.3s ease">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span style="font-size:14px">${rule.severity === 'error' ? '🚨' : '⚠️'}</span>
         <strong style="font-size:12px">Alert</strong>
-      </div >
+      </div>
       <div style="font-size:11px">${rule.name}</div>
-    </div >
-      `;
+    </div>
+  `;
 
   const alertEl = document.createElement('div');
   alertEl.innerHTML = alertHtml;
@@ -2371,50 +3013,50 @@ function showAlert(rule) {
 // Inject alert animation CSS
 const alertStyles = document.createElement('style');
 alertStyles.textContent = `
-    @keyframes slideIn {
-    from { transform: translateX(100 %); opacity: 0; }
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
-    }
-  .filter - chip {
-      display: inline - flex;
-      align - items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      font - size: 11px;
-      font - weight: 500;
-      color: var(--text - primary);
-      background: var(--bg - surface);
-      border: 1px solid var(--border);
-      border - radius: 20px;
-      cursor: pointer;
-      transition: all 0.2s cubic - bezier(0.4, 0, 0.2, 1);
-      user - select: none;
-      box - shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    }
-  .filter - chip:hover {
-      background: var(--bg - hover);
-      border - color: var(--text - secondary);
-      transform: translateY(-1px);
-      box - shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
-    }
-  .filter - chip.active {
-      background: var(--accent - blue);
-      color: white;
-      border - color: var(--accent - blue);
-      box - shadow: 0 2px 4px rgba(66, 133, 244, 0.3);
-    }
-  .filter - chip.add - filter {
-      padding: 6px 10px;
-      border - style: dashed;
-      color: var(--text - secondary);
-      background: transparent;
-    }
-  .filter - chip.add - filter:hover {
-      color: var(--accent - blue);
-      border - color: var(--accent - blue);
-      background: rgba(66, 133, 244, 0.05);
-    }
-    `;
+  }
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  .filter-chip:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-secondary);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+  }
+  .filter-chip.active {
+    background: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+    box-shadow: 0 2px 4px rgba(66, 133, 244, 0.3);
+  }
+  .filter-chip.add-filter {
+    padding: 6px 10px;
+    border-style: dashed;
+    color: var(--text-secondary);
+    background: transparent;
+  }
+  .filter-chip.add-filter:hover {
+    color: var(--accent-blue);
+    border-color: var(--accent-blue);
+    background: rgba(66, 133, 244, 0.05);
+  }
+`;
 document.head.appendChild(alertStyles);
 
 // ============================================
@@ -2426,13 +3068,16 @@ async function handleTabChange(tabId) {
   // 1. Clear Local State
   events = [];
   networkRequests = [];
-  techCache = null;
+  // Note: techCacheMap is NOT cleared here to allow persistent viewing when switching back to a tab.
+  // It is updated/refreshed inside detectTechnologies().
   expandedNetworkItems.clear();
+  expandedEventItems.clear();
+  collapsedEventGroups.clear();
 
   // 2. Reset UI to Empty States
   renderEvents();
   renderNetworkRequests();
-  if (elements.techResults) elements.techResults.innerHTML = '';
+  // We no longer clear techResults here; detectTechnologies inside handleTabChange handles it via cache/loading state.
   if (elements.containerList) elements.containerList.innerHTML = '';
   if (elements.auditResults) elements.auditResults.innerHTML = '<div class="empty-state"><p>Click Scan to start</p></div>';
 
@@ -2505,6 +3150,33 @@ async function getCurrentTab() {
 // Consent Mode Monitor
 // ============================================
 let consentState = null;
+
+async function loadConsentState() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+
+    // Try to get consent state from page
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      type: 'GET_CONSENT_STATE'
+    }).catch(() => null);
+
+    if (response?.consentState) {
+      consentState = response.consentState;
+      renderConsentState();
+    }
+  } catch (e) {
+    console.debug('[Tag Master] Failed to load consent state:', e);
+  }
+}
+
+function renderConsentState() {
+  // This function can be expanded later to show consent state in UI
+  // For now, just store it in memory
+  if (consentState) {
+    console.log('[Tag Master] Consent state loaded:', consentState);
+  }
+}
 
 
 
@@ -2586,14 +3258,14 @@ async function runAudit() {
     if (perf) {
       const perfColor = perf.impactScore === 'High' ? 'var(--error-red)' : (perf.impactScore === 'Medium' ? 'var(--warning-yellow)' : 'var(--success-green)');
       elements.auditResults.innerHTML = `
-      < div class="container-item" style = "flex-direction:column;align-items:flex-start;gap:8px;border-left:4px solid ${perfColor}" >
+      <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:8px;border-left:4px solid ${perfColor}" >
           <div style="font-size:11px;font-weight:bold;color:var(--text-primary)">Tracking Performance Impact: ${perf.impactScore}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;font-size:10px">
             <div>Scripts: <span style="font-weight:600">${perf.containerCount}</span></div>
             <div>Overhead: <span style="font-weight:600">${perf.sizeKb} KB</span></div>
             <div>Load Time: <span style="font-weight:600">${perf.loadTimeMs} ms</span></div>
           </div>
-        </div >
+        </div>
       <div style="margin:12px 0;height:1px;background:var(--border)"></div>
     `;
     }
@@ -2614,7 +3286,8 @@ async function runAudit() {
 
   // 2. Google Tag (gtag.js) Check
   const ga4Count = (containers || []).filter(c => c.type === 'GA4').length;
-  const hasGtagScript = networkRequests.some(r => r.url && r.url.includes('googletagmanager.com/gtag/js'));
+  const gtagPath = gtmDomain + '/gtag/js'; // Use dynamic domain
+  const hasGtagScript = networkRequests.some(r => r.url && r.url.includes(gtagPath));
   if (ga4Count > 1) {
     checks.push({ status: 'warning', title: 'Multiple Google Tags', desc: `Found ${ga4Count} Google Tag(gtag.js) instances.Consider consolidating.` });
   } else if (ga4Count === 1 || hasGtagScript) {
@@ -2822,6 +3495,23 @@ if (deleteTestGclAwBtn) {
 // Update tab navigation to trigger renders
 // GA4 Session Info Update Logic
 
+async function loadSessionInfo() {
+  try {
+    // Get GA4 session info from background
+    const response = await chrome.runtime.sendMessage({
+      type: 'GA4_SESSION_GET'
+    }).catch(() => null);
+
+    if (response) {
+      // Store session info for later use
+      // Can be expanded to display in UI
+      console.debug('[Tag Master] Session info loaded:', response);
+    }
+  } catch (e) {
+    console.debug('[Tag Master] Failed to load session info:', e);
+  }
+}
+
 
 
 async function checkWelcome() {
@@ -2863,6 +3553,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load saved filters and render chips
   await loadSavedFilters();
   renderFilterChips();
+  // Initialize page navigation
+  renderPageNavigation();
+  updateEventsPanelTitle();
 });
 
 

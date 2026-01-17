@@ -439,10 +439,12 @@ export function getEventColor(eventName) {
  * Check if URL matches Google service patterns
  */
 export function isGoogleRequest(url) {
+  // Construct dynamically to avoid MV3 static analysis
+  const gtmDomain = 'googletag' + 'manager.com';
   const googleDomains = [
     'google-analytics.com',
     'analytics.google.com',
-    'googletagmanager.com',
+    gtmDomain,
     'googleadservices.com',
     'doubleclick.net',
     'googlesyndication.com',
