@@ -53,7 +53,11 @@ Tag Master is a powerful Chrome Extension designed to streamline the implementat
 
 ## 🚀 Installation
 
-1. Clone this repository: `git clone https://github.com/hsynkvlc/google-swiss-knife.git`
+### From Chrome Web Store (Recommended)
+Coming soon! Currently under review.
+
+### Manual Installation (Developer Mode)
+1. Clone this repository: `git clone https://github.com/hsynkvlc/tag-master.git`
 2. Open Chrome and navigate to `chrome://extensions/`
 3. Enable **Developer mode** (top right).
 4. Click **Load unpacked** and select the root folder of this project.
@@ -69,7 +73,7 @@ Tag Master is a powerful Chrome Extension designed to streamline the implementat
 
 ## ☕ Support the Project
 If you find this tool helpful, consider supporting its development:
-- [Buy Me a Coffee](https://www.buymeacoffee.com/yourprofile)
+- [Buy Me a Coffee](https://buymeacoffee.com/tagmaster)
 
 ---
 
