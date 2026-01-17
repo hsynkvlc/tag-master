@@ -1,27 +1,24 @@
 {
-  "name": "google-swiss-knife",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "test": "tests"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "name": "tag-master",
+  "version": "1.2.0",
+  "description": "Professional GA4 & GTM Debugging Toolkit - Chrome Extension",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hsynkvlc/google-swiss-knife.git"
+    "url": "git+https://github.com/hsynkvlc/tag-master.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "keywords": [
+    "gtm",
+    "google-tag-manager",
+    "google-analytics",
+    "ga4",
+    "chrome-extension",
+    "debugging",
+    "analytics"
+  ],
+  "author": "Tag Master Project",
+  "license": "MIT",
   "bugs": {
-    "url": "https://github.com/hsynkvlc/google-swiss-knife/issues"
+    "url": "https://github.com/hsynkvlc/tag-master/issues"
   },
-  "homepage": "https://github.com/hsynkvlc/google-swiss-knife#readme",
-  "devDependencies": {
-    "playwright": "^1.57.0"
-  }
+  "homepage": "https://github.com/hsynkvlc/tag-master#readme"
 }

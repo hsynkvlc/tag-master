@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+package-lock.json
 
 # Build
 dist/
@@ -34,3 +35,6 @@ tmpclaude-*
 # Claude settings
 .claude/
 CLAUDE.md
+
+# Tests (development only)
+tests/
