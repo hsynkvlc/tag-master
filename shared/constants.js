@@ -3,6 +3,8 @@
  * Phase 1: Google Products Only
  */
 
+// No domain constants - Chrome Web Store MV3 compliance
+
 // Google Network Request Patterns
 export const GOOGLE_PATTERNS = {
   GA4: {
@@ -67,10 +69,9 @@ export const GOOGLE_PATTERNS = {
     name: 'GTM',
     icon: 'gtm',
     color: '#4285F4',
-    // Patterns constructed dynamically to avoid MV3 static analysis
     patterns: [
-      new RegExp('googletagmanager' + '\\.' + 'com\\/gtm\\.' + 'js'),
-      new RegExp('googletagmanager' + '\\.' + 'com\\/gtag\\.' + 'js')
+      /\/gtm\.js/,
+      /\/gtag\.js/
     ]
   },
   OPTIMIZE: {

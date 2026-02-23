@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tag Master",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "💍 One Extension to Rule Them All - Professional GA4 & GTM Debugging Toolkit",
   "author": "hsynkvlc",
   "permissions": [
@@ -74,5 +74,8 @@
       ]
     }
   ],
-  "minimum_chrome_version": "116"
+  "minimum_chrome_version": "116",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }

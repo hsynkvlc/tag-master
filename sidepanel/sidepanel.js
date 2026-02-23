@@ -16,6 +16,8 @@ const MESSAGE_TYPES = {
   CODE_RESULT: 'CODE_RESULT'
 };
 
+// No domain constants - Chrome Web Store MV3 compliance
+
 const PRESETS = {
   page_view: {
     event: 'page_view',
@@ -259,7 +261,7 @@ function extractPageStats(events) {
       if (urlStr !== 'Unknown Page') {
         pathname = new URL(urlStr).pathname;
       }
-    } catch {}
+    } catch { }
 
     if (!stats.has(pathname)) {
       stats.set(pathname, {
@@ -300,12 +302,10 @@ let previousTab = 'gtm';
 const elements = {
   tabs: document.querySelectorAll('.tab'),
   panels: document.querySelectorAll('.panel'),
-  gtmIdInput: document.getElementById('gtmIdInput'),
+  gtmSnippetInput: document.getElementById('gtmSnippetInput'),
   injectBtn: document.getElementById('injectBtn'),
-  initDataLayer: document.getElementById('initDataLayer'),
   overrideExisting: document.getElementById('overrideExisting'),
   previewMode: document.getElementById('previewMode'),
-  recentList: document.getElementById('recentList'),
   containerList: document.getElementById('containerList'),
   refreshContainers: document.getElementById('refreshContainers'),
   eventFilter: document.getElementById('eventFilter'),
@@ -403,6 +403,21 @@ if (elements.themeToggle) {
   });
 }
 
+// Persist GTM Snippet Input
+if (elements.gtmSnippetInput) {
+  // Load saved snippet
+  chrome.storage.local.get('savedGtmSnippet').then(res => {
+    if (res.savedGtmSnippet) {
+      elements.gtmSnippetInput.value = res.savedGtmSnippet;
+    }
+  });
+
+  // Save on input
+  elements.gtmSnippetInput.addEventListener('input', (e) => {
+    chrome.storage.local.set({ savedGtmSnippet: e.target.value });
+  });
+}
+
 // Settings Action
 if (elements.openSettings) {
   elements.openSettings.addEventListener('click', () => {
@@ -414,12 +429,10 @@ if (elements.openSettings) {
       const allPanels = document.querySelectorAll('.panel');
       allPanels.forEach(p => p.classList.remove('active'));
       elements.tabs.forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-dropdown-item').forEach(t => t.classList.remove('active'));
 
       const targetTab = previousTab === 'settings' ? 'gtm' : previousTab;
-      document.getElementById(`panel-${targetTab}`).classList.add('active');
-      const tabBtn = Array.from(elements.tabs).find(t => t.dataset.tab === targetTab);
-      if (tabBtn) tabBtn.classList.add('active');
-      currentTab = targetTab;
+      switchToTab(targetTab);
       showToast('Settings closed', 'info');
     } else {
       // Open settings
@@ -427,6 +440,7 @@ if (elements.openSettings) {
       const allPanels = document.querySelectorAll('.panel');
       allPanels.forEach(p => p.classList.remove('active'));
       elements.tabs.forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-dropdown-item').forEach(t => t.classList.remove('active'));
 
       if (settingsPanel) {
         settingsPanel.classList.add('active');
@@ -573,85 +587,185 @@ function processTemplate(obj, tab) {
 }
 
 // ============================================
-// Tab Navigation
+// Tab Navigation (Grouped Dropdowns)
 // ============================================
-elements.tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    const tabName = tab.dataset.tab;
 
-    elements.tabs.forEach(t => t.classList.remove('active'));
-    elements.panels.forEach(p => p.classList.remove('active'));
+// Map of group names to their child tab names
+const TAB_GROUPS = {
+  monitor: ['monitor', 'network'],
+  inspect: ['audit', 'cookies', 'consent', 'push']
+};
 
-    tab.classList.add('active');
-    document.getElementById(`panel-${tabName}`).classList.add('active');
-    previousTab = currentTab;
-    currentTab = tabName;
+function switchToTab(tabName) {
+  // Remove active from all tabs, dropdown items, and groups
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-dropdown-item').forEach(t => t.classList.remove('active'));
+  elements.panels.forEach(p => p.classList.remove('active'));
 
-    if (tabName === 'monitor') {
-      renderPageNavigation();
-      updateEventsPanelTitle();
+  // Close all dropdowns
+  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+
+  // Activate the panel
+  const panel = document.getElementById(`panel-${tabName}`);
+  if (panel) panel.classList.add('active');
+
+  // Find which group this tab belongs to (if any)
+  let belongsToGroup = null;
+  for (const [groupName, tabs] of Object.entries(TAB_GROUPS)) {
+    if (tabs.includes(tabName)) {
+      belongsToGroup = groupName;
+      break;
     }
-    if (tabName === 'network') renderNetworkRequests();
-    if (tabName === 'consent') checkCSP();
-    if (tabName === 'cookies') refreshCookies();
-    if (tabName === 'push') { /* Tools panel active */ }
-    if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
-    if (tabName === 'tech') detectTechnologies();
-    if (tabName === 'about') verifyElements();
+  }
+
+  if (belongsToGroup) {
+    // Activate the parent group trigger
+    const groupTrigger = document.querySelector(`.tab-group-trigger[data-group="${belongsToGroup}"]`);
+    if (groupTrigger) groupTrigger.classList.add('active');
+    // Activate the dropdown item
+    const dropdownItem = document.querySelector(`.tab-dropdown-item[data-tab="${tabName}"]`);
+    if (dropdownItem) dropdownItem.classList.add('active');
+  } else {
+    // Standalone tab
+    const tabBtn = document.querySelector(`.tab[data-tab="${tabName}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
+  }
+
+  previousTab = currentTab;
+  currentTab = tabName;
+
+  // Trigger tab-specific actions
+  if (tabName === 'monitor') {
+    renderPageNavigation();
+    updateEventsPanelTitle();
+  }
+  if (tabName === 'network') renderNetworkRequests();
+  if (tabName === 'consent') checkCSP();
+  if (tabName === 'cookies') refreshCookies();
+  if (tabName === 'push') { /* Tools panel active */ }
+  if (tabName === 'audit' && elements.auditResults.children.length <= 1) runAudit();
+  if (tabName === 'tech') detectTechnologies();
+  if (tabName === 'about') verifyElements();
+}
+
+// Standalone tab clicks (GTM, Tools, Support)
+document.querySelectorAll('.tab[data-tab]').forEach(tab => {
+  tab.addEventListener('click', () => {
+    switchToTab(tab.dataset.tab);
   });
+});
+
+// Group trigger clicks (toggle dropdown)
+document.querySelectorAll('.tab-group-trigger').forEach(trigger => {
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const group = trigger.closest('.tab-group');
+    const isOpen = group.classList.contains('open');
+
+    // Close all other dropdowns
+    document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+
+    if (!isOpen) {
+      group.classList.add('open');
+    }
+  });
+});
+
+// Dropdown item clicks
+document.querySelectorAll('.tab-dropdown-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    switchToTab(item.dataset.tab);
+  });
+});
+
+// Close dropdowns on outside click, scroll, or wheel
+document.addEventListener('click', () => {
+  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+});
+document.addEventListener('scroll', () => {
+  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
+}, true);
+document.addEventListener('wheel', () => {
+  document.querySelectorAll('.tab-group').forEach(g => g.classList.remove('open'));
 });
 
 if (elements.mainSupportLink) {
   elements.mainSupportLink.addEventListener('click', (e) => {
     e.preventDefault();
-    const aboutTab = Array.from(elements.tabs).find(t => t.dataset.tab === 'about');
-    if (aboutTab) aboutTab.click();
+    switchToTab('about');
   });
 }
 
 // ============================================
-// GTM Injector
+// GTM Snippet Injector
 // ============================================
-elements.gtmIdInput.addEventListener('input', (e) => {
-  // Auto-trim and uppercase
-  const value = e.target.value.trim().toUpperCase();
-  e.target.value = value;
 
-  if (value.length >= 6) {
-    const result = validateGTMId(value);
-    e.target.className = `input ${result.valid ? 'success' : 'error'}`;
+// Helper: Extract GTM ID from snippet
+function extractGTMId(snippet) {
+  const match = snippet.match(/GTM-[A-Z0-9]{6,8}|G-[A-Z0-9]{10,}/i);
+  return match ? match[0].toUpperCase() : null;
+}
+
+// Helper: Validate snippet
+function validateSnippet(snippet) {
+  if (!snippet || snippet.length < 50) {
+    return { valid: false, error: 'Snippet too short' };
+  }
+  if (!snippet.includes('GTM-') && !snippet.includes('gtm.js')) {
+    return { valid: false, error: 'Not a valid GTM snippet' };
+  }
+  const gtmId = extractGTMId(snippet);
+  if (!gtmId) {
+    return { valid: false, error: 'GTM ID not found in snippet' };
+  }
+  return { valid: true, gtmId };
+}
+
+// Real-time snippet validation
+elements.gtmSnippetInput.addEventListener('input', (e) => {
+  const snippet = e.target.value.trim();
+  const statusEl = document.getElementById('snippetStatus');
+
+  if (snippet.length > 50) {
+    const result = validateSnippet(snippet);
+    if (result.valid) {
+      statusEl.textContent = `✓ Detected: ${result.gtmId}`;
+      statusEl.style.color = 'var(--accent-green)';
+    } else {
+      statusEl.textContent = `✗ ${result.error}`;
+      statusEl.style.color = 'var(--accent-red)';
+    }
   } else {
-    e.target.className = 'input';
+    statusEl.textContent = '';
   }
 });
 
 elements.injectBtn.addEventListener('click', async () => {
-  // Auto-trim whitespace from GTM ID
-  const trimmedValue = elements.gtmIdInput.value.trim();
-  elements.gtmIdInput.value = trimmedValue;
+  const snippet = elements.gtmSnippetInput.value.trim();
 
-  const result = validateGTMId(trimmedValue);
-  if (!result.valid) {
-    showToast('Invalid GTM ID format', 'error');
+  const validation = validateSnippet(snippet);
+  if (!validation.valid) {
+    showToast(validation.error, 'error');
     return;
   }
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: MESSAGE_TYPES.GTM_INJECT,
-      gtmId: result.formatted,
+      gtmId: validation.gtmId,
       options: {
-        initDataLayer: elements.initDataLayer.checked,
+        snippet: snippet,
         override: elements.overrideExisting.checked,
         preview: elements.previewMode.checked
       }
     });
 
     if (response?.success) {
-      showToast(`GTM ${result.formatted} injected!`, 'success');
-      elements.gtmIdInput.value = '';
-      elements.gtmIdInput.className = 'input';
-      loadRecentIds();
+      showToast(`GTM ${validation.gtmId} injected!`, 'success');
+      elements.gtmSnippetInput.value = '';
+      document.getElementById('snippetStatus').textContent = '';
+
       // Persist injection for this host
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.url) {
@@ -659,9 +773,9 @@ elements.injectBtn.addEventListener('click', async () => {
           const hostname = new URL(tab.url).hostname;
           await chrome.storage.local.set({
             ['gtm_inject_' + hostname]: {
-              gtmId: result.formatted,
+              gtmId: validation.gtmId,
+              snippet: snippet,
               options: {
-                initDataLayer: elements.initDataLayer.checked,
                 override: elements.overrideExisting.checked,
                 preview: elements.previewMode.checked
               }
@@ -680,26 +794,15 @@ elements.injectBtn.addEventListener('click', async () => {
   }
 });
 
-async function loadRecentIds() {
-  const result = await chrome.storage.local.get('recentGTMIds');
-  const recentIds = result.recentGTMIds || [];
-
-  elements.recentList.innerHTML = recentIds.length ? recentIds.map(id =>
-    `<button class="recent-item" data-id="${id}">${id}</button>`
-  ).join('') : '<span style="color:var(--text-muted);font-size:11px">No recent IDs</span>';
-
-  elements.recentList.querySelectorAll('.recent-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      elements.gtmIdInput.value = btn.dataset.id;
-      elements.gtmIdInput.className = 'input success';
-    });
-  });
-}
+// Recent IDs removed - now using snippet-based injection
 
 let detectionRetries = 0;
 const MAX_RETRIES = 3;
 
 async function detectContainers(isRetry = false) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id) currentTabId = tab.id;
+
   if (!isRetry) {
     elements.refreshContainers.querySelector('svg').classList.add('spin-animation');
   }
@@ -717,26 +820,86 @@ async function detectContainers(isRetry = false) {
 
     const containers = Array.isArray(response) ? response : [];
 
+    // Get injected ID for current tab
+    let injectedId = null;
+    try {
+      if (currentTabId) {
+        const tabInfo = await chrome.tabs.get(currentTabId);
+        if (tabInfo && tabInfo.url) {
+          const hostname = new URL(tabInfo.url).hostname;
+          const stored = await chrome.storage.local.get('gtm_inject_' + hostname);
+          injectedId = stored['gtm_inject_' + hostname]?.gtmId;
+        }
+      }
+    } catch (e) { }
+
     if (containers.length > 0) {
       detectionRetries = 0;
       elements.refreshContainers.querySelector('svg').classList.remove('spin-animation');
       elements.containerList.innerHTML = containers.map(c => {
         const ga4DebugUrl = c.type === 'GA4' ? `https://analytics.google.com/analytics/web/#/p${c.id.replace('G-', '')}/debugview` : null;
+        const isInjected = c.id === injectedId;
+        const tagAssistantUrl = `https://tagassistant.google.com/#/?id=${c.id}&url=${encodeURIComponent(tab.url)}`;
+
+        // Button Logic:
+        // GA4 -> Open DebugView
+        // GTM (especially injected) -> Open Tag Assistant
+
+        let actionButton = '';
+        if (c.type === 'GA4') {
+          actionButton = `
+              <a href="${ga4DebugUrl}" target="_blank" title="Open GA4 DebugView" style="
+                  display:flex;
+                  align-items:center;
+                  gap:6px;
+                  background:var(--google-blue);
+                  color:white;
+                  text-decoration:none;
+                  padding:4px 10px;
+                  border-radius:12px;
+                  font-size:11px;
+                  font-weight:500;
+                  transition:opacity 0.2s;
+                  white-space:nowrap;
+                " onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                <span>Open DebugView</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+              </a>`;
+        } else if (c.type === 'GTM' || c.type === 'UA') {
+          actionButton = `
+              <a href="${tagAssistantUrl}" target="_blank" title="Open Tag Assistant" style="
+                  display:flex;
+                  align-items:center;
+                  gap:6px;
+                  background:var(--google-blue);
+                  color:white;
+                  text-decoration:none;
+                  padding:4px 10px;
+                  border-radius:12px;
+                  font-size:11px;
+                  font-weight:500;
+                  transition:opacity 0.2s;
+                  white-space:nowrap;
+                " onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                <span>Open Tag Assistant</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+              </a>`;
+        }
+
         return `
-        <div class="container-item">
+        <div class="container-item" style="${isInjected ? 'border-left: 3px solid var(--accent-blue); background: rgba(66, 133, 244, 0.05);' : ''}">
           <div class="container-info">
             <div class="container-icon ${c.type?.toLowerCase() || 'gtm'}">${c.type === 'GA4' ? 'G4' : 'GTM'}</div>
             <div>
-              <div class="container-id">${c.id}</div>
+              <div class="container-id" style="display:flex;align-items:center;gap:6px">
+                ${c.id}
+                ${isInjected ? '<span style="font-size:9px;background:var(--accent-blue);color:white;padding:1px 4px;border-radius:4px;font-weight:bold">INJECTED</span>' : ''}
+              </div>
               <div class="container-type">${c.type || 'GTM'} ${c.dataLayer ? `(${c.dataLayer})` : ''}</div>
             </div>
           </div>
-          <div style="display:flex;gap:4px">
-            ${ga4DebugUrl ? `
-              <a href="${ga4DebugUrl}" target="_blank" class="btn-icon btn-small" title="Open GA4 DebugView" style="color:var(--google-blue);border-color:var(--google-blue);text-decoration:none;display:flex">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              </a>
-            ` : ''}
+          <div style="display:flex;gap:4px;align-items:center">
+            ${actionButton}
             <button class="btn-icon btn-small copy-container-id" data-container-id="${c.id}" title="Copy ID">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
@@ -961,6 +1124,7 @@ async function detectTechnologies(forceRefresh = false) {
   if (!tab?.id) return;
 
   const tabId = tab.id;
+  currentTabId = tabId;
 
   // Prevent multiple simultaneous requests for the same tab
   if (techInFlight.has(tabId)) {
@@ -1070,9 +1234,10 @@ function renderTechResults(detected) {
 
   // Group by category with custom order
   const categoryOrder = [
-    'Tag Management', 'Analytics', 'Marketing', 'Advertising', 'A/B Testing',
-    'JavaScript Framework', 'JavaScript Library', 'CSS Framework',
-    'CMS', 'E-commerce', 'Customer Support', 'Payment', 'Security', 'CDN', 'Fonts', 'Other'
+    'CMS', 'Tag Management', 'Analytics', 'Marketing', 'Advertising', 'A/B Testing',
+    'Consent Management', 'JavaScript Framework', 'JavaScript Library', 'CSS Framework',
+    'E-commerce', 'Customer Support', 'Payment', 'Security', 'CDN', 'Hosting',
+    'Search', 'Video', 'Maps', 'PWA', 'Fonts', 'Other'
   ];
 
   const grouped = {};
@@ -1089,28 +1254,103 @@ function renderTechResults(detected) {
     return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
   });
 
+  // Default to first category
+  const defaultCategory = sortedCategories[0];
+
   elements.techResults.innerHTML = `
     <div style="margin-bottom:10px;padding:8px 10px;background:var(--bg-secondary);border-radius:6px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:11px;color:var(--text-secondary)">Found <strong style="color:var(--accent-blue)">${detected.length}</strong> technologies</span>
       <span style="font-size:10px;color:var(--text-muted)">${new Date().toLocaleTimeString()}</span>
     </div>
-  ` + sortedCategories.map(category => `
-    <div style="margin-bottom:12px">
-      <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">${category} (${grouped[category].length})</div>
-      ${grouped[category].map(tech => `
-        <div class="container-item" style="margin-bottom:4px;padding:8px 10px">
-          <div style="display:flex;align-items:center;gap:8px;flex:1">
-            <span style="font-size:16px">${tech.icon}</span>
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:600;font-size:12px;color:var(--text-primary)">${tech.name}</div>
-              ${tech.version ? `<div style="font-size:10px;color:var(--accent-blue)">v${tech.version}</div>` : ''}
-              ${tech.details ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px">${tech.details}</div>` : ''}
-            </div>
+    <div style="display:flex;gap:12px;height:calc(100vh - 200px);min-height:400px">
+      <!-- Left Sidebar: Categories -->
+      <div id="tech-categories-sidebar" style="width:180px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border);padding-right:12px">
+        ${sortedCategories.map((category, idx) => `
+          <div class="tech-category-item ${idx === 0 ? 'active' : ''}" data-category="${category}" style="
+            padding:8px 10px;
+            margin-bottom:4px;
+            border-radius:6px;
+            cursor:pointer;
+            transition:all 0.2s;
+            background:${idx === 0 ? 'var(--bg-secondary)' : 'transparent'};
+            border-left:3px solid ${idx === 0 ? 'var(--accent-blue)' : 'transparent'};
+          ">
+            <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:2px">${category}</div>
+            <div style="font-size:9px;color:var(--text-muted)">${grouped[category].length} ${grouped[category].length === 1 ? 'item' : 'items'}</div>
           </div>
-        </div>
-      `).join('')}
+        `).join('')}
+      </div>
+      
+      <!-- Right Panel: Technology Details -->
+      <div id="tech-details-panel" style="flex:1;overflow-y:auto;padding-left:4px">
+        ${sortedCategories.map((category, idx) => `
+          <div class="tech-category-content ${idx === 0 ? 'active' : ''}" data-category="${category}" style="display:${idx === 0 ? 'block' : 'none'}">
+            <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+              ${category} (${grouped[category].length})
+            </div>
+            ${grouped[category].map(tech => `
+              <div class="container-item" style="margin-bottom:6px;padding:10px 12px">
+                <div style="display:flex;align-items:center;gap:10px;flex:1">
+                  <img src="${tech.icon}" alt="${tech.name}" class="tech-icon" style="width:20px;height:20px;flex-shrink:0;border-radius:3px;object-fit:contain"><span style="display:none;width:20px;height:20px;flex-shrink:0;border-radius:3px;background:var(--bg-tertiary);align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text-secondary)">${tech.name.charAt(0)}</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-weight:600;font-size:12px;color:var(--text-primary)">${tech.name}</div>
+                    ${tech.version ? `<div style="font-size:10px;color:var(--accent-blue);margin-top:2px">v${tech.version}</div>` : ''}
+                    ${tech.details ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px">${tech.details}</div>` : ''}
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+      </div>
     </div>
-  `).join('');
+  `;
+
+  // Attach error listeners to images (CSP compliant)
+  elements.techResults.querySelectorAll('.tech-icon').forEach(img => {
+    img.addEventListener('error', () => {
+      img.style.display = 'none';
+      const fallback = img.nextElementSibling;
+      if (fallback) fallback.style.display = 'flex';
+    });
+  });
+
+  // Add click handlers for category switching
+  const categoryItems = elements.techResults.querySelectorAll('.tech-category-item');
+  const contentPanels = elements.techResults.querySelectorAll('.tech-category-content');
+
+  categoryItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const category = item.dataset.category;
+
+      // Update active states
+      categoryItems.forEach(i => {
+        const isActive = i.dataset.category === category;
+        i.classList.toggle('active', isActive);
+        i.style.background = isActive ? 'var(--bg-secondary)' : 'transparent';
+        i.style.borderLeftColor = isActive ? 'var(--accent-blue)' : 'transparent';
+      });
+
+      // Show corresponding content
+      contentPanels.forEach(panel => {
+        const isActive = panel.dataset.category === category;
+        panel.classList.toggle('active', isActive);
+        panel.style.display = isActive ? 'block' : 'none';
+      });
+    });
+
+    // Add hover effect
+    item.addEventListener('mouseenter', () => {
+      if (!item.classList.contains('active')) {
+        item.style.background = 'var(--bg-hover)';
+      }
+    });
+    item.addEventListener('mouseleave', () => {
+      if (!item.classList.contains('active')) {
+        item.style.background = 'transparent';
+      }
+    });
+  });
 }
 
 if (elements.refreshTech) {
@@ -1130,72 +1370,128 @@ elements.refreshContainers.addEventListener('click', () => {
 function getEventTypeStyle(eventName) {
   const eventType = eventName.toLowerCase();
 
+  // Icon patterns (12x12 viewbox optimized)
+  const icons = {
+    purchase: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', // dollar-sign
+    cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>', // shopping-cart
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', // trash-2
+    creditCard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>', // credit-card
+    dollar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', // dollar-sign
+    package: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', // package
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>', // eye
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>', // list
+    touch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>', // check-square (alternative to touch)
+    bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>', // shopping-bag
+    file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>', // file-text
+    arrowDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>', // arrow-down
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>', // lock
+    userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>', // user-plus
+    logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>', // log-out
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>', // search
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>', // share-2
+    click: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><circle cx="12" cy="12" r="10"/><path d="M12 8l4 4-4 4M8 12h8"/></svg>', // arrow-right-circle
+    zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>' // zap
+  };
+
+  // Get Command (Purple)
+  if (eventType.startsWith('get.') || eventType === 'get') {
+    return { color: '#8B5CF6', icon: icons.zap, label: 'GET' };
+  }
+
+  // Clear Ecommerce -> "data"
+  if (eventType === 'data' || eventType.includes('clear_ecommerce')) {
+    return { color: '#6B7280', icon: icons.trash, label: 'Data' };
+  }
+
   // E-commerce events (Red/Orange)
   if (eventType.includes('purchase')) {
-    return { color: '#EF4444', icon: '💰', label: 'Purchase' };
+    return { color: '#EF4444', icon: icons.purchase, label: 'Purchase' };
   }
   if (eventType.includes('add_to_cart') || eventType.includes('addtocart')) {
-    return { color: '#F97316', icon: '🛒', label: 'Add to Cart' };
+    return { color: '#F97316', icon: icons.cart, label: 'Add to Cart' };
   }
   if (eventType.includes('remove_from_cart')) {
-    return { color: '#DC2626', icon: '🗑️', label: 'Remove from Cart' };
+    return { color: '#DC2626', icon: icons.trash, label: 'Remove from Cart' };
   }
   if (eventType.includes('begin_checkout') || eventType.includes('checkout')) {
-    return { color: '#FB923C', icon: '💳', label: 'Checkout' };
+    return { color: '#FB923C', icon: icons.creditCard, label: 'Checkout' };
   }
   if (eventType.includes('add_payment') || eventType.includes('payment')) {
-    return { color: '#F59E0B', icon: '💵', label: 'Payment' };
+    return { color: '#F59E0B', icon: icons.dollar, label: 'Payment' };
   }
   if (eventType.includes('add_shipping') || eventType.includes('shipping')) {
-    return { color: '#FBBF24', icon: '📦', label: 'Shipping' };
+    return { color: '#FBBF24', icon: icons.package, label: 'Shipping' };
   }
 
   // Product events (Blue/Purple)
   if (eventType.includes('view_item') || eventType.includes('product_view')) {
-    return { color: '#3B82F6', icon: '👁️', label: 'View Item' };
+    return { color: '#3B82F6', icon: icons.eye, label: 'View Item' };
   }
   if (eventType.includes('view_item_list') || eventType.includes('product_list')) {
-    return { color: '#6366F1', icon: '📋', label: 'View List' };
+    return { color: '#6366F1', icon: icons.list, label: 'View List' };
   }
   if (eventType.includes('select_item')) {
-    return { color: '#8B5CF6', icon: '👆', label: 'Select Item' };
+    return { color: '#8B5CF6', icon: icons.click, label: 'Select Item' };
   }
   if (eventType.includes('view_cart')) {
-    return { color: '#A855F7', icon: '🛍️', label: 'View Cart' };
+    return { color: '#A855F7', icon: icons.bag, label: 'View Cart' };
   }
 
   // Page events (Green)
   if (eventType.includes('page_view') || eventType.includes('pageview')) {
-    return { color: '#10B981', icon: '📄', label: 'Page View' };
+    return { color: '#10B981', icon: icons.file, label: 'Page View' };
   }
   if (eventType.includes('scroll')) {
-    return { color: '#14B8A6', icon: '⬇️', label: 'Scroll' };
+    return { color: '#14B8A6', icon: icons.arrowDown, label: 'Scroll' };
   }
 
   // User events (Cyan)
   if (eventType.includes('login') || eventType.includes('sign_in')) {
-    return { color: '#06B6D4', icon: '🔐', label: 'Login' };
+    return { color: '#06B6D4', icon: icons.lock, label: 'Login' };
   }
   if (eventType.includes('sign_up') || eventType.includes('register')) {
-    return { color: '#0EA5E9', icon: '✍️', label: 'Sign Up' };
+    return { color: '#0EA5E9', icon: icons.userPlus, label: 'Sign Up' };
   }
   if (eventType.includes('logout')) {
-    return { color: '#0284C7', icon: '🚪', label: 'Logout' };
+    return { color: '#0284C7', icon: icons.logout, label: 'Logout' };
   }
 
   // Engagement events (Yellow)
   if (eventType.includes('search') || eventType.includes('view_search_results')) {
-    return { color: '#EAB308', icon: '🔍', label: 'Search' };
+    return { color: '#EAB308', icon: icons.search, label: 'Search' };
   }
   if (eventType.includes('share')) {
-    return { color: '#FACC15', icon: '📤', label: 'Share' };
+    return { color: '#FACC15', icon: icons.share, label: 'Share' };
   }
   if (eventType.includes('click')) {
-    return { color: '#FDE047', icon: '👆', label: 'Click' };
+    return { color: '#FDE047', icon: icons.click, label: 'Click' };
   }
 
   // Custom/Generic events (Gray)
-  return { color: '#9CA3AF', icon: '⚡', label: eventName };
+  return { color: '#9CA3AF', icon: icons.zap, label: eventName };
+}
+
+function flattenObject(obj, prefix = '') {
+  const result = {};
+  for (const key in obj) {
+    if (!obj.hasOwnProperty(key)) continue;
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    const value = obj[key];
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      Object.assign(result, flattenObject(value, fullKey));
+    } else if (Array.isArray(value)) {
+      value.forEach((item, i) => {
+        if (item !== null && typeof item === 'object') {
+          Object.assign(result, flattenObject(item, `${fullKey}.${i}`));
+        } else {
+          result[`${fullKey}.${i}`] = item;
+        }
+      });
+    } else {
+      result[fullKey] = value;
+    }
+  }
+  return result;
 }
 
 function renderEvents() {
@@ -1217,7 +1513,7 @@ function renderEvents() {
         if (urlStr !== 'Unknown Page') {
           pathname = new URL(urlStr).pathname;
         }
-      } catch {}
+      } catch { }
 
       return pathname === selectedPageFilter;
     });
@@ -1297,9 +1593,6 @@ function renderEvents() {
       return `
       <div class="event-group" style="margin-bottom:12px">
         <div class="group-header" data-group-index="${groupIdx}" data-group-key="${groupKey}" style="
-          position: sticky;
-          top: 0;
-          z-index: 10;
           background: var(--bg-secondary);
           padding: 6px 10px;
           border-bottom: 1px solid var(--border);
@@ -1323,7 +1616,17 @@ function renderEvents() {
         <div class="group-items" id="group-items-${groupIdx}" style="display:${groupDisplay}">
           ${group.events.map(event => {
         const data = event.data?.data || event.data || event;
-        const eventName = data?.event || data?.['0'] || event.eventName || 'push';
+        let eventName = data?.event || data?.['0'] || event.eventName || 'push';
+
+        // Detect "Clear Ecommerce" (ecommerce: null) -> Rename to "data"
+        if ((eventName === 'push' || eventName === 'unknown') && data && data.ecommerce === null) {
+          eventName = 'data';
+        }
+
+        // Detect "get" command and format as "get.TARGET (gtag)"
+        if (eventName === 'get' && data && data['1']) {
+          eventName = `${eventName}.${data['1']} (gtag)`;
+        }
         const jsonString = JSON.stringify(data, null, 2);
         const validation = validateGA4Event(data);
 
@@ -1333,7 +1636,7 @@ function renderEvents() {
             (validation.score >= 50 ? 'var(--warning-yellow)' : 'var(--error-red)');
 
           validationHtml = `
-          <div class="validation-panel validation-panel-hoverable" style="margin:8px 0;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid ${scoreColor};cursor:pointer;transition:background 0.2s ease">
+          <div class="validation-panel validation-panel-hoverable" style="margin:8px 0 0 0;padding:10px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid ${scoreColor};cursor:pointer;transition:background 0.2s ease">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span style="font-size:10px;font-weight:600;color:var(--text-secondary)">Schema Validation</span>
               <span style="font-size:11px;font-weight:bold;color:${scoreColor}">Score: ${validation.score}/100</span>
@@ -1363,7 +1666,7 @@ function renderEvents() {
         `;
         } else if (GA4_EVENT_SCHEMAS[eventName]) {
           validationHtml = `
-          <div class="validation-success-hoverable" style="margin:8px 0;padding:6px 10px;background:rgba(34,197,94,0.1);border-radius:4px;border-left:3px solid var(--success-green);display:flex;align-items:center;gap:6px;cursor:pointer;transition:background 0.2s ease">
+          <div class="validation-success-hoverable" style="margin:8px 0 0 0;padding:6px 10px;background:rgba(34,197,94,0.1);border-radius:4px;border-left:3px solid var(--success-green);display:flex;align-items:center;gap:6px;cursor:pointer;transition:background 0.2s ease">
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--success-green)" stroke-width="2" style="width:12px;height:12px"><polyline points="20 6 9 17 4 12"/></svg>
             <span style="font-size:10px;color:var(--success-green);font-weight:500">Valid GA4 Event (100/100)</span>
           </div>
@@ -1377,41 +1680,102 @@ function renderEvents() {
         // Get event styling
         const eventStyle = getEventTypeStyle(eventName);
 
+        // Build flat JSON view
+        const flatJson = flattenObject(data);
+        const flatString = Object.entries(flatJson).map(([k, v]) => {
+          const val = typeof v === 'string' ? `"${v}"` : v;
+          return `<div class="flat-row" data-copy-value="${k}" style="display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer;transition:background 0.15s" title="Click to copy key"><span style="color:var(--accent-blue);white-space:nowrap;font-size:10px">${k}</span><span style="color:var(--text-muted)">:</span><span style="color:var(--text-primary);word-break:break-all;flex:1">${val}</span><svg class="flat-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;flex-shrink:0;opacity:0.3;transition:opacity 0.15s"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2h1"/></svg></div>`;
+        }).join('');
+
+        // Build colored JSON view
+        const jsonHtml = syntaxHighlight(data);
+
         return `
             <div class="event-item" data-id="${event.id}" style="border-color: ${itemBorderColor}">
               <div class="event-header" style="cursor: pointer;">
                  <div style="display:flex;flex-direction:column;gap:2px">
                    <span style="font-size:10px;color:var(--text-secondary)">${formatTimestamp(event.timestamp)}</span>
                    <span class="event-name" style="color:${eventStyle.color};display:flex;align-items:center;gap:4px;font-weight:600;">
-                     <span style="font-size:14px;">${eventStyle.icon}</span>
+                     ${eventStyle.icon}
                      <span>${eventName}</span>
                    </span>
                  </div>
                  <div class="event-actions">
-                    <button class="copy-btn" title="Copy JSON" data-json='${jsonString.replace(/'/g, "&apos;")}'>
+                    <button class="copy-btn" title="Copy Event Name" data-event-name="${eventName}">
                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2h1"/></svg>
                     </button>
                  </div>
               </div>
               ${validationHtml}
-              <div class="event-details" style="display:${detailsDisplay};margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">${jsonString}</div>
+              <div class="event-details" style="display:${detailsDisplay};margin-top:0;padding-top:0;border-top:none;font-family:'Consolas','Monaco',monospace;font-size:11px"><!-- View Tabs --><div class="details-tabs" style="display:flex;gap:8px;margin-bottom:0;padding-bottom:0;border-bottom:none;font-size:10px;font-weight:600;color:var(--text-secondary)"><span class="tab-link active" data-view="flat" style="padding:2px 6px;border-radius:4px;background:var(--bg-tertiary);cursor:pointer">Flat View</span><span class="tab-link" data-view="json" style="padding:2px 6px;border-radius:4px;cursor:pointer">JSON View</span></div><!-- Flat View Container --><div class="view-flat" style="display:block;margin-top:4px">${flatString}</div><!-- JSON View Container --><div class="view-json" style="display:none;white-space:pre;overflow-x:auto;padding:4px;background:var(--bg-primary);border-radius:4px;border:1px solid var(--border);font-family:Consolas,Monaco,monospace">${jsonHtml}</div></div>
             </div>
           `;
       }).join('')}
-        </div>
-      </div>
-      `;
+         </div>
+       </div>
+       `;
     }).join('');
+
 
     // Attach Listeners
     elements.eventList.querySelectorAll('.copy-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const json = btn.dataset.json;
-        navigator.clipboard.writeText(json).then(() => {
+        const name = btn.dataset.eventName;
+        navigator.clipboard.writeText(name).then(() => {
           const originalHTML = btn.innerHTML;
           btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--success-green)"><polyline points="20 6 9 17 4 12"/></svg>`;
           setTimeout(() => btn.innerHTML = originalHTML, 1500);
+        });
+      });
+    });
+
+    // Toggle Flat/JSON View
+    elements.eventList.querySelectorAll('.tab-link').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const view = tab.dataset.view;
+        const container = tab.closest('.event-details');
+
+        // Update tabs
+        container.querySelectorAll('.tab-link').forEach(t => {
+          const isActive = t.dataset.view === view;
+          t.classList.toggle('active', isActive);
+          t.style.background = isActive ? 'var(--bg-tertiary)' : 'transparent';
+        });
+
+        // Update views
+        if (view === 'flat') {
+          container.querySelector('.view-flat').style.display = 'block';
+          container.querySelector('.view-json').style.display = 'none';
+        } else {
+          container.querySelector('.view-flat').style.display = 'none';
+          container.querySelector('.view-json').style.display = 'block';
+        }
+      });
+    });
+
+    // Copy individual flat row values
+    elements.eventList.querySelectorAll('.flat-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const val = row.dataset.copyValue;
+        navigator.clipboard.writeText(val).then(() => {
+          row.style.background = 'rgba(34,197,94,0.1)';
+          const icon = row.querySelector('.flat-copy-icon');
+          if (icon) {
+            icon.innerHTML = '<polyline points="20 6 9 17 4 12"/>';
+            icon.style.opacity = '1';
+            icon.style.stroke = 'var(--success-green)';
+          }
+          setTimeout(() => {
+            row.style.background = '';
+            if (icon) {
+              icon.innerHTML = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2h1"/>';
+              icon.style.opacity = '0.3';
+              icon.style.stroke = '';
+            }
+          }, 1000);
         });
       });
     });
@@ -1599,6 +1963,7 @@ elements.clearEvents.addEventListener('click', () => {
 async function loadEvents() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) currentTabId = tab.id;
     const result = await chrome.runtime.sendMessage({
       type: MESSAGE_TYPES.DATALAYER_GET,
       tabId: tab?.id
@@ -1635,53 +2000,75 @@ const GA4_PARAMS = {
   '_ee': 'Enhanced Measurement'
 };
 
+let currentTabId = null;
+
 // Get request type styling (icon + color + label)
 function getRequestTypeStyle(request) {
   const url = request.url || '';
   const urlLower = url.toLowerCase();
 
+  // CHECK DETECTED TECHNOLOGIES FIRST
+  if (currentTabId && techCacheMap.has(currentTabId)) {
+    const detected = techCacheMap.get(currentTabId).data || [];
+    for (const tech of detected) {
+      if (tech.patterns && tech.patterns.length > 0) {
+        // specific pattern matching
+        for (const pattern of tech.patterns) {
+          if (urlLower.includes(pattern.toLowerCase())) {
+            return {
+              icon: `<img src="${tech.icon}" style="width:12px;height:12px;object-fit:contain;border-radius:2px" onerror="this.style.display='none'">`,
+              color: 'var(--text-primary)',
+              bgColor: 'var(--bg-tertiary)',
+              label: tech.name
+            };
+          }
+        }
+      }
+    }
+  }
+
   // GA4 (Google Analytics 4)
   if (urlLower.includes('/g/collect') || urlLower.includes('google-analytics.com/g/')) {
-    return { icon: '📊', color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' };
+    return { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' };
   }
 
   // Universal Analytics (Legacy)
   if (urlLower.includes('/collect') && !urlLower.includes('/g/collect')) {
-    return { icon: '📈', color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' };
+    return { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' };
   }
 
   // Google Ads Conversion
   if (urlLower.includes('googleadservices.com') || urlLower.includes('/pagead/conversion')) {
-    return { icon: '💰', color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' };
+    return { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' };
   }
 
   // Google Ads Remarketing
   if (urlLower.includes('/pagead/1p-user-list') || urlLower.includes('google.com/pagead/')) {
-    return { icon: '🎯', color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' };
+    return { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' };
   }
 
   // Floodlight
   if (urlLower.includes('fls.doubleclick.net') || urlLower.includes('ad.doubleclick.net')) {
-    return { icon: '🔦', color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' };
+    return { icon: '<img src="https://cdn.simpleicons.org/googlecampaignmanager360/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' };
   }
 
-  // GTM (Google Tag Manager)
-  if (urlLower.includes('googletagmanager.com')) {
-    return { icon: '🏷️', color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: 'GTM' };
+  // GTM (Google Tag Manager) - path-based detection
+  if (urlLower.includes('/gtm.js') || urlLower.includes('/gtag/js')) {
+    return { icon: '<img src="https://cdn.simpleicons.org/googletagmanager/246FDB" style="width:12px;height:12px;object-fit:contain;">', color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: 'GTM' };
   }
 
   // DoubleClick (Generic)
   if (urlLower.includes('doubleclick.net')) {
-    return { icon: '📡', color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.1)', label: 'DoubleClick' };
+    return { icon: '<svg viewBox="0 0 24 24" fill="#EC4899" style="width:12px;height:12px"><circle cx="12" cy="12" r="8"/></svg>', color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.1)', label: 'DoubleClick' };
   }
 
   // Google Optimize
   if (urlLower.includes('optimize.google.com') || urlLower.includes('googleoptimize.com')) {
-    return { icon: '🧪', color: '#8B5CF6', bgColor: 'rgba(139, 92, 246, 0.1)', label: 'Optimize' };
+    return { icon: '<svg viewBox="0 0 24 24" fill="#8B5CF6" style="width:12px;height:12px"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>', color: '#8B5CF6', bgColor: 'rgba(139, 92, 246, 0.1)', label: 'Optimize' };
   }
 
   // Default (Unknown Google Service)
-  return { icon: '🌐', color: '#6B7280', bgColor: 'rgba(107, 114, 128, 0.1)', label: 'Google' };
+  return { icon: '<svg viewBox="0 0 24 24" fill="#6B7280" style="width:12px;height:12px"><circle cx="12" cy="12" r="10"/><path d="M2.5 12h19M12 2.5a19.5 19.5 0 0 1 0 19a19.5 19.5 0 0 1 0-19"/></svg>', color: '#6B7280', bgColor: 'rgba(107, 114, 128, 0.1)', label: 'Request' };
 }
 
 function renderNetworkRequests() {
@@ -1972,7 +2359,9 @@ async function loadNetworkRequests() {
     // We haven't implemented MESSAGE_TYPES.NETWORK_GET listener fully with tabId filtering in sidepanel context easily
     // But service worker supports it. We need current tab ID.
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
+    if (!tab?.id) return;
+
+    currentTabId = tab.id;
 
     const result = await chrome.runtime.sendMessage({
       type: 'NETWORK_GET',
@@ -2553,10 +2942,7 @@ const KEYBOARD_SHORTCUTS = {
   'Escape': () => closeModals()
 };
 
-function switchToTab(tabName) {
-  const tab = Array.from(elements.tabs).find(t => t.dataset.tab === tabName);
-  if (tab) tab.click();
-}
+// switchToTab is defined in the Tab Navigation section above
 
 function focusCurrentFilter() {
   if (currentTab === 'monitor' && elements.eventFilter) {
@@ -3492,6 +3878,8 @@ if (deleteTestGclAwBtn) {
 
 
 
+
+
 // Update tab navigation to trigger renders
 // GA4 Session Info Update Logic
 
@@ -3520,12 +3908,16 @@ async function checkWelcome() {
     if (elements.welcomeOverlay) {
       elements.welcomeOverlay.style.display = 'flex';
     }
+  } else {
+    if (elements.welcomeOverlay) {
+      elements.welcomeOverlay.style.display = 'none';
+    }
   }
 }
 
 if (elements.getStartedBtn) {
-  elements.getStartedBtn.addEventListener('click', async () => {
-    await chrome.storage.local.set({ welcome_dismissed: true });
+  elements.getStartedBtn.addEventListener('click', () => {
+    // UI First - Immediate feedback
     if (elements.welcomeOverlay) {
       elements.welcomeOverlay.style.opacity = '0';
       elements.welcomeOverlay.style.transition = 'opacity 0.3s ease';
@@ -3533,6 +3925,11 @@ if (elements.getStartedBtn) {
         elements.welcomeOverlay.style.display = 'none';
       }, 300);
     }
+
+    // Logic Second - Persist state
+    chrome.storage.local.set({ welcome_dismissed: true }).catch(err => {
+      console.warn('Failed to save welcome state:', err);
+    });
   });
 }
 
@@ -3542,8 +3939,8 @@ if (elements.getStartedBtn) {
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   checkWelcome();
-  loadRecentIds();
   detectContainers();
+  detectTechnologies(); // Populate tech cache for network icons
   checkActiveInjection();
   loadEvents();
   loadNetworkRequests();
@@ -3558,4 +3955,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateEventsPanelTitle();
 });
 
+
+
+// Syntax Highlighter
+function syntaxHighlight(json) {
+  if (typeof json !== 'string') {
+    json = JSON.stringify(json, undefined, 2);
+  }
+  json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+    let cls = 'syntax-number';
+    if (/^"/.test(match)) {
+      if (/:$/.test(match)) {
+        cls = 'syntax-key';
+      } else {
+        cls = 'syntax-string';
+      }
+    } else if (/true|false/.test(match)) {
+      cls = 'syntax-boolean';
+    } else if (/null/.test(match)) {
+      cls = 'syntax-null';
+    }
+    return '<span class="' + cls + '">' + match + '</span>';
+  });
+}
 

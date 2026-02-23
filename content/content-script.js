@@ -6,9 +6,10 @@
 (function () {
   'use strict';
 
+  console.log('[Tag Master] Content script execution started');
+
   // Idempotency check
   if (window.__tagMasterContentScriptLoaded) {
-    console.debug('[Tag Master] Content script already loaded, skipping re-init');
     return;
   }
   window.__tagMasterContentScriptLoaded = true;
@@ -32,6 +33,22 @@
   // ============================================
   let pendingCallbacks = {};
 
+  // Helper: Safe JSON serializer for circular references
+  function safeSerialize(obj) {
+    const cache = new Set();
+    return JSON.parse(JSON.stringify(obj, (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (cache.has(value)) {
+          // Circular reference found, discard key
+          return '[Circular]';
+        }
+        // Store value in our collection
+        cache.add(value);
+      }
+      return value;
+    }));
+  }
+
   window.addEventListener('message', (event) => {
     if (event.source !== window || event.data?.source !== 'tag-master-extension') {
       return;
@@ -42,23 +59,35 @@
 
     // Handle Selector messages specifically to ensure they are broadcasted
     if (type === 'SELECTOR_RESULT') {
-      chrome.runtime.sendMessage({
-        type: 'SELECTOR_RESULT',
-        payload: payload
-      });
+      try {
+        if (chrome.runtime?.id) {
+          chrome.runtime.sendMessage({
+            type: 'SELECTOR_RESULT',
+            payload: payload
+          });
+        }
+      } catch (e) { }
     }
 
     if (requestId && pendingCallbacks[requestId]) {
       pendingCallbacks[requestId](payload.data);
       delete pendingCallbacks[requestId];
     } else if (type === 'DATALAYER_EVENT') {
-      chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.DATALAYER_PUSH,
-        data: {
-          ...payload,
-          url: window.location.href
+      try {
+        if (chrome.runtime?.id) {
+          // Use safeSerialize to prevent circular structure errors
+          const safePayload = safeSerialize(payload);
+          chrome.runtime.sendMessage({
+            type: MESSAGE_TYPES.DATALAYER_PUSH,
+            data: {
+              ...safePayload,
+              url: window.location.href
+            }
+          });
         }
-      });
+      } catch (e) {
+        // Extension context invalidated - ignore
+      }
     }
   });
 
@@ -123,7 +152,6 @@
         return await sendCommand('GET_DATALAYER');
 
       case MESSAGE_TYPES.DATALAYER_PUSH:
-        console.log('[Tag Master] Pushing to DataLayer:', message.data);
         return await sendCommand('PUSH_DATALAYER', {
           data: message.data
         });
@@ -173,15 +201,14 @@
       const stored = await chrome.storage.local.get(key);
       const config = stored[key];
 
-      if (config) {
-        console.log('[Tag Master] Auto-injecting GTM:', config.gtmId);
-        // Add small delay to ensure page script is ready
-        setTimeout(async () => {
-          await sendCommand('INJECT_GTM', {
-            gtmId: config.gtmId,
-            options: config.options
-          });
-        }, 500);
+      if (config && config.snippet) {
+        await sendCommand('INJECT_GTM', {
+          gtmId: config.gtmId,
+          options: {
+            snippet: config.snippet,
+            ...config.options
+          }
+        });
       }
     } catch (e) {
       console.error('[Tag Master] Auto-inject error:', e);
@@ -189,7 +216,4 @@
   }
 
   checkAutoInject();
-
-  console.log('[Tag Master] Content script initialized');
-
 })();

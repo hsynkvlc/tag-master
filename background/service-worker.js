@@ -147,7 +147,6 @@ async function startSession() {
   };
 
   await dbAdd('sessions', currentSession);
-  console.log('[Tag Master] Session started:', currentSession.id);
   return currentSession;
 }
 
@@ -368,11 +367,46 @@ async function handleMessage(message, sender) {
       // Forward to content script
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab) {
-        return await chrome.tabs.sendMessage(tab.id, {
-          type: MESSAGE_TYPES.GTM_INJECT,
-          gtmId: message.gtmId,
-          options: message.options
-        });
+        try {
+          // Try to send message to existing content script
+          return await chrome.tabs.sendMessage(tab.id, {
+            type: MESSAGE_TYPES.GTM_INJECT,
+            gtmId: message.gtmId,
+            options: message.options
+          });
+        } catch (e) {
+          // Content script not loaded, inject it first
+          try {
+            // Inject page-script first (MAIN world)
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content/page-script.js'],
+              world: 'MAIN'
+            });
+
+            // Wait a bit for page script to initialize
+            await new Promise(r => setTimeout(r, 100));
+
+            // Inject content-script (ISOLATED world)
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content/content-script.js']
+            });
+
+            // Wait for content script to initialize
+            await new Promise(r => setTimeout(r, 200));
+
+            // Retry sending message
+            return await chrome.tabs.sendMessage(tab.id, {
+              type: MESSAGE_TYPES.GTM_INJECT,
+              gtmId: message.gtmId,
+              options: message.options
+            });
+          } catch (injectError) {
+            console.error('[Tag Master] Script injection failed:', injectError);
+            return { error: 'Failed to inject scripts: ' + injectError.message };
+          }
+        }
       }
       return { error: 'No active tab' };
 
@@ -508,7 +542,7 @@ async function handleMessage(message, sender) {
               return result;
             }
           } catch (sendError) {
-            console.log('[Tag Master] Content script not responding on tab', techTabId, ', retry with injection...');
+            // Content script not responding, retry with injection
           }
 
           // 2. Inject scripts if message failed
@@ -653,13 +687,10 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 // Initialization
 // ============================================
 async function initialize() {
-  console.log('[Tag Master] Initializing...');
-
   try {
     await initDatabase();
     await loadSettings();
     await startSession();
-    console.log('[Tag Master] Initialized successfully');
   } catch (error) {
     console.error('[Tag Master] Initialization error:', error);
   }
