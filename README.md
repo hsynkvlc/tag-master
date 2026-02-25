@@ -1,9 +1,11 @@
+
 # 🛠️ Tag Master
 
 **Professional toolkit for GTM Experts, Marketing Analysts, and Web Developers.**
 
 Tag Master is a powerful Chrome Extension designed to streamline the implementation, debugging, and auditing of Google Tag Manager (GTM) and Google Analytics 4 (GA4).
 
+<a href="https://www.producthunt.com/products/tag-master?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-tag-master" target="_blank" rel="noopener noreferrer"><img alt="Tag Master - Debug GA4 &amp; GTM like a pro - all tools in one side panel | Product Hunt" width="125" height="27" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1085251&amp;theme=light&amp;t=1772058972881"></a>
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.2.1-green.svg)
 ![Type](https://img.shields.io/badge/platform-Chrome_Extension-orange.svg)
