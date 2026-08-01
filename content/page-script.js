@@ -227,6 +227,10 @@
                 reply('PERFORMANCE_METRICS', getPerformanceMetrics());
                 break;
 
+            case 'GET_PREVIEW_STATUS':
+                reply('PREVIEW_STATUS', getPreviewStatus());
+                break;
+
             case 'CLEAR_GOOGLE_COOKIES':
                 clearGoogleCookies();
                 reply('COOKIES_CLEARED', { success: true });
@@ -736,6 +740,41 @@
         };
 
         return state;
+    }
+
+    // ============================================
+    // GTM Preview Mode Detection
+    // ============================================
+    function getPreviewStatus() {
+        const signals = [];
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('gtm_debug')) signals.push('gtm_debug URL param');
+        } catch (e) { }
+        try {
+            if (document.cookie.indexOf('gtm_debug=') !== -1) signals.push('gtm_debug cookie');
+        } catch (e) { }
+        try {
+            if (document.referrer && document.referrer.indexOf('tagassistant.google.com') !== -1) {
+                signals.push('opened from Tag Assistant');
+            }
+        } catch (e) { }
+        try {
+            if (document.getElementById('__TAG_ASSISTANT_BADGE') ||
+                document.querySelector('iframe[src*="tagassistant.google.com"]')) {
+                signals.push('Tag Assistant badge on page');
+            }
+        } catch (e) { }
+        try {
+            // Tag Assistant's connected debug session exposes this hook
+            if (window.__TAG_ASSISTANT_API || window.__TAG_ASSISTANT) signals.push('Tag Assistant API hook');
+        } catch (e) { }
+
+        return {
+            active: signals.length > 0,
+            signals: signals,
+            url: window.location.href
+        };
     }
 
     function getPerformanceMetrics() {

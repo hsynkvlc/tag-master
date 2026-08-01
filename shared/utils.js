@@ -436,31 +436,6 @@ export function getEventColor(eventName) {
 }
 
 /**
- * Check if URL matches Google service patterns
- */
-export function isGoogleRequest(url) {
-  // Construct dynamically to avoid MV3 static analysis
-  const gtmDomain = 'googletag' + 'manager.com';
-  const googleDomains = [
-    'google-analytics.com',
-    'analytics.google.com',
-    gtmDomain,
-    'googleadservices.com',
-    'doubleclick.net',
-    'googlesyndication.com',
-    'googleoptimize.com',
-    'optimize.google.com'
-  ];
-
-  try {
-    const urlObj = new URL(url);
-    return googleDomains.some(domain => urlObj.hostname.includes(domain));
-  } catch (e) {
-    return false;
-  }
-}
-
-/**
  * Process template variables
  */
 export function processTemplate(template, variables = {}) {

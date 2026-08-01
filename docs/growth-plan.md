@@ -60,6 +60,29 @@ Looking for a Tag Assistant alternative, a dataLayer inspector, or a pixel helpe
 30 sn'lik demo videosu ekle (Loom yeterli). **Featured badge başvurusu yap** (CWS best practices listesi).
 **Yerelleştirme:** en az TR + ES + DE listing çevirisi (rakipler İngilizce-only).
 
+## Policy denetimi (2026-08-01, v1.4.0) + izin gerekçeleri
+
+Denetlendi: ❌ eval/new Function yok · ❌ string-split obfuskasyon KALDIRILDI (utils.js'deki ölü
+isGoogleRequest + gtmDomain hilesi temizlendi — CWS obfuskasyon yasağına takılabilirdi) · ❌ uzak kod yok
+(CDN'den yalnızca <img> ikonları geliyor, kod değil) · GTM Injector v1.2.1'de bu haliyle incelemeden
+geçti, mekanizma değişmedi (kullanıcının yapıştırdığı snippet'i sayfaya basar; Featured rozetli
+"Datalayer Checker" aynısını yapıyor) · Ad 52 karakter, işlev tarifi — keyword listesi değil (TagHound/
+Insighter emsal) · Açıklamadaki her iddia gerçek (29 vendor, hit blocking, sGTM) · Veri toplama YOK
+(dashboard Privacy sekmesinde "does not collect user data" işaretle).
+
+**Dashboard izin gerekçeleri (Privacy practices sekmesine yapıştır):**
+- `storage` + `unlimitedStorage`: Captured debugging sessions and user preferences are stored locally (IndexedDB). Nothing leaves the device.
+- `tabs`: Identify the active tab being debugged and group captured requests per tab.
+- `scripting`: Re-inject the detection content scripts into already-open tabs when the user opens the panel.
+- `sidePanel`: The extension's main UI is a side panel.
+- `cookies`: The Cookies panel lists and lets the user delete tracking cookies of the inspected site.
+- `webRequest`: Read-only observation of tracking requests to power the network inspector.
+- `webNavigation`: Attribute captured events to page navigations and refresh panel state on navigation.
+- `activeTab`: User-invoked actions (element picker, audits) on the current page.
+- `declarativeNetRequest`: User-controlled features only: Hit Blocker (block chosen vendors' tracking requests), GA4 DebugView toggle (adds _dbg=1 to GA4 hits), sGTM preview header (attaches X-Gtm-Server-Preview to the user's own endpoint).
+- Host permissions `<all_urls>`: Tag debugging must work on whichever site the user is auditing; requests to any tracking endpoint must be observable.
+- Single purpose: "Inspect, debug and validate website tracking tags."
+
 ## Dağıtım (ilk 30 gün, sıfır bütçe, sırayla)
 
 1. Önce listing düzelt + v1.4.0 yayınla (bayatlık da bir sıralama sinyali).

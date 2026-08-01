@@ -951,7 +951,7 @@ async function detectContainers(isRetry = false) {
 // CSP Compatibility Checker
 // ============================================
 // Build CSP requirements dynamically (avoids MV3 static analysis)
-const gtmDomain = 'googletag' + 'manager.com';
+const gtmDomain = 'googletagmanager.com';
 const CSP_REQUIREMENTS = {
   'GTM Core': {
     'script-src': ['*.' + gtmDomain],
@@ -2568,6 +2568,7 @@ chrome.runtime.onMessage.addListener((message) => {
     updateCurrentUrl(message.data.url);
     checkActiveInjection();
     detectContainers();
+    loadPreviewStatus();
     if (currentTab === 'cookies') refreshCookies();
     if (currentTab === 'tech') {
       // Auto-refresh tech detection on URL change
@@ -4152,6 +4153,85 @@ async function initHitBlocker() {
   if (dbgToggle) dbgToggle.addEventListener('change', saveBlockRules);
 }
 initHitBlocker();
+
+// ============================================
+// GTM Preview Enhancer
+// ============================================
+async function loadPreviewStatus() {
+  const container = document.getElementById('previewStatus');
+  if (!container) return;
+
+  const status = await chrome.runtime.sendMessage({ type: 'GET_PREVIEW_STATUS' }).catch(() => null);
+
+  if (status?.active) {
+    container.innerHTML = `
+      <div class="container-item" style="border-left:4px solid var(--success-green);flex-direction:column;align-items:flex-start;gap:4px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--success-green)">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--success-green)"></span>
+          Preview mode active on this page
+        </div>
+        <div style="font-size:10px;color:var(--text-muted)">${(status.signals || []).map(escapeHtml).join(' · ')}</div>
+      </div>`;
+  } else {
+    container.innerHTML = `
+      <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--text-muted)"></span>
+          No active preview on this page
+        </div>
+        <div style="font-size:10px;color:var(--text-muted)">Use "Open Tag Assistant" on a detected container above to start one.</div>
+      </div>`;
+  }
+}
+
+const refreshPreviewBtn = document.getElementById('refreshPreviewStatus');
+if (refreshPreviewBtn) {
+  refreshPreviewBtn.addEventListener('click', loadPreviewStatus);
+}
+loadPreviewStatus();
+
+async function initSgtmPreview() {
+  const domainInput = document.getElementById('sgtmDomain');
+  const tokenInput = document.getElementById('sgtmToken');
+  const enabledToggle = document.getElementById('sgtmPreviewEnabled');
+  if (!domainInput || !tokenInput || !enabledToggle) return;
+
+  const stored = await chrome.runtime.sendMessage({ type: 'GET_SGTM_PREVIEW' }).catch(() => null)
+    || { domain: '', token: '', enabled: false };
+  domainInput.value = stored.domain || '';
+  tokenInput.value = stored.token || '';
+  enabledToggle.checked = !!stored.enabled;
+
+  async function saveSgtmPreview() {
+    // Accept full URLs pasted by the user; keep only the hostname
+    let domain = domainInput.value.trim();
+    try {
+      if (domain.includes('://')) domain = new URL(domain).hostname;
+    } catch (e) { /* keep raw value */ }
+    domain = domain.replace(/^www\./, '').replace(/\/.*$/, '');
+    domainInput.value = domain;
+
+    const result = await chrome.runtime.sendMessage({
+      type: 'SET_SGTM_PREVIEW',
+      domain,
+      token: tokenInput.value.trim(),
+      enabled: enabledToggle.checked
+    }).catch(() => null);
+
+    if (result) {
+      showToast(result.sgtmPreview?.enabled
+        ? `Preview header attached for ${result.sgtmPreview.domain}`
+        : 'sGTM preview header disabled', 'success');
+    } else {
+      showToast('Failed to save sGTM preview settings', 'error');
+    }
+  }
+
+  enabledToggle.addEventListener('change', saveSgtmPreview);
+  domainInput.addEventListener('change', () => { if (enabledToggle.checked) saveSgtmPreview(); });
+  tokenInput.addEventListener('change', () => { if (enabledToggle.checked) saveSgtmPreview(); });
+}
+initSgtmPreview();
 
 // ============================================
 // CSV Export (spreadsheet-friendly flat rows)

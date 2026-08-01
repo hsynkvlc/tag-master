@@ -365,10 +365,11 @@ async function addRecentGTMId(gtmId) {
 // Hit Blocker + GA4 DebugView (declarativeNetRequest dynamic rules)
 // ============================================
 const DEBUG_MODE_RULE_ID = 9999;
+const SGTM_PREVIEW_RULE_ID = 9998;
 
 async function syncBlockRules() {
-  const { tmBlockedVendors = [], tmGa4Debug = false } =
-    await chrome.storage.local.get(['tmBlockedVendors', 'tmGa4Debug']);
+  const { tmBlockedVendors = [], tmGa4Debug = false, tmSgtmPreview = null } =
+    await chrome.storage.local.get(['tmBlockedVendors', 'tmGa4Debug', 'tmSgtmPreview']);
 
   const rules = [];
   let id = 1;
@@ -415,12 +416,34 @@ async function syncBlockRules() {
     });
   }
 
+  if (tmSgtmPreview?.enabled && tmSgtmPreview.domain && tmSgtmPreview.token) {
+    // Attach the sGTM preview token so server-container hits show up in the
+    // GTM server preview session (what "sGTM PreviewEZ"-style tools do).
+    rules.push({
+      id: SGTM_PREVIEW_RULE_ID,
+      priority: 3,
+      action: {
+        type: 'modifyHeaders',
+        requestHeaders: [{ header: 'X-Gtm-Server-Preview', operation: 'set', value: tmSgtmPreview.token }]
+      },
+      condition: {
+        requestDomains: [tmSgtmPreview.domain],
+        resourceTypes: [...resourceTypes, 'main_frame']
+      }
+    });
+  }
+
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: existing.map(r => r.id),
     addRules: rules
   });
-  return { blockedVendors: tmBlockedVendors, ga4Debug: tmGa4Debug, ruleCount: rules.length };
+  return {
+    blockedVendors: tmBlockedVendors,
+    ga4Debug: tmGa4Debug,
+    sgtmPreview: tmSgtmPreview ? { domain: tmSgtmPreview.domain, enabled: !!tmSgtmPreview.enabled } : null,
+    ruleCount: rules.length
+  };
 }
 
 // ============================================
@@ -697,6 +720,33 @@ async function handleMessage(message, sender) {
         }
       }
       return { technologies: [], error: 'No active tab' };
+
+    case 'GET_PREVIEW_STATUS': {
+      const [pvTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (pvTab) {
+        try {
+          return await chrome.tabs.sendMessage(pvTab.id, { type: 'GET_PREVIEW_STATUS' }, { frameId: 0 });
+        } catch (e) {
+          return { active: false, signals: [], error: 'Page not accessible' };
+        }
+      }
+      return { active: false, signals: [] };
+    }
+
+    case 'SET_SGTM_PREVIEW':
+      await chrome.storage.local.set({
+        tmSgtmPreview: {
+          domain: (message.domain || '').trim(),
+          token: (message.token || '').trim(),
+          enabled: !!message.enabled
+        }
+      });
+      return await syncBlockRules();
+
+    case 'GET_SGTM_PREVIEW': {
+      const stored = await chrome.storage.local.get('tmSgtmPreview');
+      return stored.tmSgtmPreview || { domain: '', token: '', enabled: false };
+    }
 
     case 'SET_BLOCK_RULES':
       await chrome.storage.local.set({
