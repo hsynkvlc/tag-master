@@ -591,9 +591,10 @@ function processTemplate(obj, tab) {
 // ============================================
 
 // Map of group names to their child tab names
+// Core views (GTM, Events, Network, Audit) are standalone one-click tabs;
+// secondary panels live under "More".
 const TAB_GROUPS = {
-  monitor: ['monitor', 'network'],
-  inspect: ['audit', 'cookies', 'consent', 'push']
+  more: ['consent', 'cookies', 'push', 'tech', 'about']
 };
 
 function switchToTab(tabName) {
@@ -1866,7 +1867,7 @@ function renderEvents() {
           <polyline points="2 12 12 17 22 12"/>
         </svg>
         <p>No dataLayer events yet</p>
-        <p style="font-size:11px;margin-top:4px">Events will appear here</p>
+        <p style="font-size:11px;margin-top:4px">Reload the page to capture events from the start, or click around the site to trigger new ones</p>
       </div>
       `;
   }
@@ -2418,7 +2419,8 @@ function renderNetworkRequests() {
           <line x1="2" y1="12" x2="22" y2="12"></line>
           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
         </svg>
-        <p>No network requests</p>
+        <p>No tracking requests yet</p>
+        <p style="font-size:11px;margin-top:4px">Reload the page to capture hits from the very first request — 29 platforms are watched automatically</p>
       </div>
       `;
   }
@@ -2640,12 +2642,17 @@ chrome.runtime.onMessage.addListener((message) => {
     }
 
     if (classes && classes.length > 0) {
-      suggestions.push({
-        type: 'Click Classes',
-        condition: 'contains',
-        value: classes[0],
-        desc: 'Class-based targeting'
-      });
+      // Skip utility/state classes (Tailwind variants, hover/focus states) —
+      // they make terrible GTM trigger conditions
+      const meaningfulClass = classes.find(c => !c.includes(':') && !/^(hover|active|focus|valid|invalid|ng-|ember|j_|w-|h-|p-|m-|px-|py-|mx-|my-|text-|bg-|flex|grid|block|inline)/.test(c));
+      if (meaningfulClass) {
+        suggestions.push({
+          type: 'Click Classes',
+          condition: 'contains',
+          value: meaningfulClass,
+          desc: 'Class-based targeting'
+        });
+      }
     }
 
     // data-attributes are gold for GTM
@@ -2668,20 +2675,41 @@ chrome.runtime.onMessage.addListener((message) => {
       desc: 'Hierarchical path'
     });
 
-    triggerHtml += suggestions.map(s => `
-      <div style="background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:4px">
+    // "How to use" is a real sequence — these are the literal GTM steps
+    triggerHtml += `
+      <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:10px;color:var(--text-secondary);line-height:1.6">
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:2px">Use in Google Tag Manager</div>
+        1. Triggers → New → <b>Click – All Elements</b><br>
+        2. Fire on: <b>Some Clicks</b><br>
+        3. Pick a condition below and paste its value
+      </div>`;
+
+    triggerHtml += suggestions.map((s, i) => `
+      <div style="background:var(--bg-secondary);padding:8px;border:1px solid var(--border);border-radius:6px">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">
-          <span style="font-weight:bold;color:var(--google-blue)">${s.type}</span>
-          <span style="font-size:9px;color:var(--text-muted)">${s.desc}</span>
+          <span style="font-weight:bold;color:var(--google-blue)">${escapeHtml(s.type)}</span>
+          <span style="font-size:9px;color:var(--text-muted)">${escapeHtml(s.desc)}</span>
         </div>
-        <div style="font-size:10px;margin-bottom:4px">Condition: <span style="color:var(--text-secondary)">${s.condition}</span></div>
-        <div style="font-family:monospace;background:var(--bg-primary);padding:4px;border-radius:2px;word-break:break-all">${s.value}</div>
+        <div style="font-size:10px;margin-bottom:4px">Condition: <span style="color:var(--text-secondary)">${escapeHtml(s.condition)}</span></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div style="flex:1;font-family:monospace;background:var(--bg-primary);padding:5px 6px;border-radius:4px;word-break:break-all;font-size:10px">${escapeHtml(s.value)}</div>
+          <button class="btn-icon btn-small copy-trigger-value" data-value="${escapeHtml(s.value)}" title="Copy value">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
       </div>
       `).join('');
     triggerHtml += '</div>';
 
     if (elements.triggerSuggestions) {
       elements.triggerSuggestions.innerHTML = triggerHtml;
+      elements.triggerSuggestions.querySelectorAll('.copy-trigger-value').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          navigator.clipboard.writeText(btn.dataset.value);
+          showToast('Condition value copied — paste it into your GTM trigger', 'success');
+        });
+      });
     }
 
     // 2. Generate Code with smart value extraction
