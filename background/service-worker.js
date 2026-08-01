@@ -3,8 +3,9 @@
  * Handles: Network interception, storage, message passing, session management
  */
 
-import { MESSAGE_TYPES, DEFAULT_SETTINGS, GOOGLE_PATTERNS } from '../shared/constants.js';
-import { generateId, identifyGoogleRequest, isGoogleRequest, validateEnhancedConversions } from '../shared/utils.js';
+import { MESSAGE_TYPES, DEFAULT_SETTINGS } from '../shared/constants.js';
+import { generateId, validateEnhancedConversions } from '../shared/utils.js';
+import '../shared/vendors.js'; // exposes tmClassifyRequest & co. on globalThis
 
 // ============================================
 // State Management
@@ -162,33 +163,91 @@ async function updateSession(updates) {
 // ============================================
 // Network Request Handling
 // ============================================
-function captureNetworkRequest(details) {
-  const googleType = identifyGoogleRequest(details.url);
-  if (!googleType) return;
+// Maps webRequest requestId -> {tabId, id} so onCompleted/onErrorOccurred can
+// find the captured record without relying on URL equality (identical hits repeat).
+const requestIdIndex = new Map();
+
+// Decode a webRequest requestBody into a plain object (form data or JSON)
+function decodeRequestBody(requestBody) {
+  if (!requestBody) return null;
+  try {
+    if (requestBody.formData) {
+      const flat = {};
+      for (const [key, values] of Object.entries(requestBody.formData)) {
+        flat[key] = values.length === 1 ? values[0] : values.join(', ');
+      }
+      return { kind: 'form', data: flat };
+    }
+    if (requestBody.raw && requestBody.raw[0]?.bytes) {
+      const text = new TextDecoder().decode(requestBody.raw[0].bytes);
+      if (text.length > 50000) return null;
+      const trimmed = text.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        return { kind: 'json', data: JSON.parse(trimmed) };
+      }
+      // GA4 batched hits: newline-separated query strings
+      return { kind: 'text', data: text };
+    }
+  } catch (e) { /* undecodable body */ }
+  return null;
+}
+
+function captureNetworkRequest(details, classification) {
+  const cls = classification || tmClassifyRequest(details.url, { initiator: details.initiator });
+  if (!cls) return;
 
   const urlObj = new URL(details.url);
-  const ecValidation = googleType.type === 'GOOGLE_ADS_CONVERSION' ? validateEnhancedConversions(Object.fromEntries(urlObj.searchParams)) : null;
+  const ecValidation = cls.type === 'GOOGLE_ADS_CONVERSION' ? validateEnhancedConversions(Object.fromEntries(urlObj.searchParams)) : null;
+
+  // Body decoding (JSON POST vendors like TikTok, GA4 batches, form posts)
+  const body = decodeRequestBody(details.requestBody);
+  let bodyParams = null;
+  if (body?.kind === 'form') bodyParams = body.data;
+
+  const vendorDef = TM_VENDOR_BY_ID[cls.type === 'GA4_SERVER_SIDE' ? 'GA4' : cls.type];
+  if (body?.kind === 'json' && vendorDef?.extractFromBody) {
+    const extra = vendorDef.extractFromBody(body.data);
+    if (extra) {
+      if (extra.event && !cls.event) cls.event = extra.event;
+      if (extra.accountId && !cls.accountId) cls.accountId = extra.accountId;
+      if (extra.eventId && !cls.eventId) cls.eventId = extra.eventId;
+    }
+  }
 
   const request = {
     id: generateId(),
     timestamp: Date.now(),
-    type: googleType.type,
-    typeName: googleType.name,
-    typeColor: googleType.color,
-    isServerSide: googleType.isServerSide,
+    type: cls.type,
+    typeName: cls.name,
+    typeColor: cls.color,
+    category: cls.category,
+    isServerSide: cls.isServerSide,
+    firstParty: cls.firstParty,
+    accountId: cls.accountId,
+    event: cls.event,
+    eventId: cls.eventId,
     hasEnhancedConversions: ecValidation?.detected || false,
     ecValidation: ecValidation,
     url: details.url,
     method: details.method,
-    tabId: details.tabId
+    tabId: details.tabId,
+    bodyParams
   };
 
   if (!tabRequests[details.tabId]) tabRequests[details.tabId] = [];
   tabRequests[details.tabId].push(request);
   if (tabRequests[details.tabId].length > 300) tabRequests[details.tabId].shift();
 
+  if (details.requestId) {
+    requestIdIndex.set(details.requestId, { tabId: details.tabId, id: request.id });
+    if (requestIdIndex.size > 600) {
+      const firstKey = requestIdIndex.keys().next().value;
+      requestIdIndex.delete(firstKey);
+    }
+  }
+
   // Extract GA4 Session Info
-  if (googleType.type === 'GA4' || googleType.type === 'GA4_SERVER_SIDE') {
+  if (cls.type === 'GA4' || cls.type === 'GA4_SERVER_SIDE') {
     const tid = urlObj.searchParams.get('tid');
     const cid = urlObj.searchParams.get('cid');
     const sid = urlObj.searchParams.get('sid');
@@ -440,15 +499,10 @@ async function handleMessage(message, sender) {
       if (!targetUrl) return [];
 
       const allCookies = await chrome.cookies.getAll({ url: targetUrl });
-      // Identify Google cookies
+      // Identify tracking cookies across all registry vendors (incl. sGTM's FPID/FPLC)
       return allCookies.filter(c =>
-        c.name.startsWith('_ga') ||
-        c.name.startsWith('_gid') ||
-        c.name.startsWith('_gcl') ||
-        c.name.includes('gac') ||
-        c.name.includes('FPID') ||
-        c.domain.includes('google.com') ||
-        c.domain.includes('doubleclick.net')
+        TM_TRACKING_COOKIE_PREFIXES.some(prefix => c.name.startsWith(prefix)) ||
+        TM_TRACKING_COOKIE_DOMAINS.some(domain => c.domain.includes(domain))
       ).sort((a, b) => a.name.localeCompare(b.name));
 
     case MESSAGE_TYPES.COOKIES_DELETE:
@@ -580,6 +634,18 @@ async function handleMessage(message, sender) {
       }
       return { technologies: [], error: 'No active tab' };
 
+    case 'GET_PERFORMANCE_METRICS': {
+      const [perfTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (perfTab) {
+        try {
+          return await chrome.tabs.sendMessage(perfTab.id, { type: 'GET_PERFORMANCE_METRICS' });
+        } catch (e) {
+          return null;
+        }
+      }
+      return null;
+    }
+
     case 'GA4_SESSION_GET':
       const [sessionTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       return sessionTab ? (tabSessions[sessionTab.id] || null) : null;
@@ -595,32 +661,33 @@ async function handleMessage(message, sender) {
 // ============================================
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
-    if (isGoogleRequest(details.url)) {
-      captureNetworkRequest(details);
+    const cls = tmClassifyRequest(details.url, { initiator: details.initiator });
+    if (cls) {
+      captureNetworkRequest(details, cls);
     }
   },
   { urls: ['<all_urls>'] },
   ['requestBody']
 );
 
+function patchCapturedRequest(details, updates) {
+  const ref = requestIdIndex.get(details.requestId);
+  if (!ref) return;
+  updateNetworkRequest(ref.tabId, ref.id, updates);
+  // Re-broadcast so the sidepanel can update the status badge live
+  broadcastMessage({
+    type: 'NETWORK_REQUEST_UPDATE',
+    data: { id: ref.id, tabId: ref.tabId, ...updates }
+  });
+}
+
 chrome.webRequest.onCompleted.addListener(
   (details) => {
-    if (isGoogleRequest(details.url)) {
-      const requests = tabRequests[details.tabId] || [];
-      const request = requests.find(
-        r => r.url === details.url && r.tabId === details.tabId
-      );
-      if (request) {
-        updateNetworkRequest(details.tabId, request.id, {
-          statusCode: details.statusCode,
-          timing: {
-            ...(request.timing || {}),
-            endTime: details.timeStamp,
-            duration: request.timing ? details.timeStamp - request.timing.startTime : 0
-          }
-        });
-      }
-    }
+    patchCapturedRequest(details, {
+      statusCode: details.statusCode,
+      completedAt: details.timeStamp
+    });
+    requestIdIndex.delete(details.requestId);
   },
   { urls: ['<all_urls>'] },
   ['responseHeaders']
@@ -628,18 +695,11 @@ chrome.webRequest.onCompleted.addListener(
 
 chrome.webRequest.onErrorOccurred.addListener(
   (details) => {
-    if (isGoogleRequest(details.url)) {
-      const requests = tabRequests[details.tabId] || [];
-      const request = requests.find(
-        r => r.url === details.url && r.tabId === details.tabId
-      );
-      if (request) {
-        updateNetworkRequest(details.tabId, request.id, {
-          error: details.error,
-          statusCode: 0
-        });
-      }
-    }
+    patchCapturedRequest(details, {
+      error: details.error,
+      statusCode: 0
+    });
+    requestIdIndex.delete(details.requestId);
   },
   { urls: ['<all_urls>'] }
 );

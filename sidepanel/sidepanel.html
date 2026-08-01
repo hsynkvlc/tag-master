@@ -559,6 +559,31 @@
       <!-- Consent Panel -->
       <div class="panel" id="panel-consent">
 
+        <!-- Consent Mode Status Section -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="width:16px;height:16px">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              Consent Mode Status
+            </div>
+            <button class="btn-icon" id="refreshConsent" title="Refresh Consent State">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+          </div>
+          <p style="font-size:10px;color:var(--text-muted);margin-bottom:10px">
+            Live Google Consent Mode v2 state read from the page, plus tags that fired while consent was denied.
+          </p>
+          <div id="consentStatus" class="container-list">
+            <div class="empty-state">
+              <p>Click refresh to read consent state</p>
+            </div>
+          </div>
+        </div>
 
         <!-- CSP Checker Section -->
         <div class="section">
@@ -1030,6 +1055,7 @@
 
   </div>
 
+  <script src="../shared/vendors.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 

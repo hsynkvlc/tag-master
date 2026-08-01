@@ -175,6 +175,12 @@
       case 'GET_PERFORMANCE_METRICS':
         return await sendCommand('GET_PERFORMANCE_METRICS');
 
+      case 'CLEAR_GOOGLE_COOKIES':
+        return await sendCommand('CLEAR_GOOGLE_COOKIES');
+
+      case 'BLOCK_GA4_HITS':
+        return await sendCommand('BLOCK_GA4_HITS', { enabled: message.enabled });
+
       case 'SELECTOR_START':
         return await sendCommand('SELECTOR_START');
 

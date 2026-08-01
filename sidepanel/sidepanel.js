@@ -2002,10 +2002,35 @@ const GA4_PARAMS = {
 
 let currentTabId = null;
 
+// Escape page-controlled strings before putting them into innerHTML templates
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Get request type styling (icon + color + label)
 function getRequestTypeStyle(request) {
   const url = request.url || '';
   const urlLower = url.toLowerCase();
+
+  // Registry-classified vendors (SW already resolved the type) — covers every
+  // non-Google vendor; Google types keep their branded icons below.
+  const vendorDef = typeof TM_VENDOR_BY_ID !== 'undefined' ? TM_VENDOR_BY_ID[request.type] : null;
+  if (vendorDef && vendorDef.category !== 'google') {
+    return {
+      icon: `<svg viewBox="0 0 24 24" style="width:12px;height:12px"><circle cx="12" cy="12" r="9" fill="${vendorDef.color}"/></svg>`,
+      color: vendorDef.color,
+      bgColor: 'var(--bg-tertiary)',
+      label: vendorDef.name
+    };
+  }
+  if (request.type === 'GA4_SERVER_SIDE') {
+    return { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#F9AB00', bgColor: 'rgba(249, 171, 0, 0.1)', label: 'GA4 (sGTM)' };
+  }
 
   // CHECK DETECTED TECHNOLOGIES FIRST
   if (currentTabId && techCacheMap.has(currentTabId)) {
@@ -2097,8 +2122,23 @@ function renderNetworkRequests() {
       { label: 'Total', count: networkRequests.length, filter: '' },
       { label: 'GA4', count: networkRequests.filter(r => r.type.includes('GA4')).length, filter: 'ga4' },
       { label: 'GAds', count: networkRequests.filter(r => (r.type.includes('ADS') || r.type.includes('DOUBLECLICK') || r.type.includes('CONVERSION')) && !r.type.includes('GA4')).length, filter: 'ads|doubleclick' },
-      { label: 'GTM', count: networkRequests.filter(r => r.type === 'GTM_JS').length, filter: 'gtm.js' }
+      { label: 'GTM', count: networkRequests.filter(r => r.type === 'GTM').length, filter: 'gtm' }
     ];
+
+    // One chip per non-Google vendor seen on this page (registry-driven)
+    if (typeof TM_VENDORS !== 'undefined') {
+      for (const vendor of TM_VENDORS) {
+        if (vendor.category === 'google') continue;
+        const count = networkRequests.filter(r => r.type === vendor.id).length;
+        if (count > 0) {
+          stats.push({ label: vendor.name, count, filter: vendor.name.toLowerCase() });
+        }
+      }
+    }
+    const serverSideCount = networkRequests.filter(r => r.isServerSide).length;
+    if (serverSideCount > 0) {
+      stats.push({ label: 'sGTM', count: serverSideCount, filter: 'server-side' });
+    }
 
     elements.networkStats.innerHTML = stats.map(s => `
       <div class="stat-chip" 
@@ -2151,37 +2191,54 @@ function renderNetworkRequests() {
       const isSuccess = (req.statusCode >= 200 && req.statusCode < 300) || req.statusCode === 0;
       const isGA4 = req.type.includes('GA4');
 
+      // Vendor-specific parameter dictionary from the registry
+      const paramVendor = typeof TM_VENDOR_BY_ID !== 'undefined'
+        ? TM_VENDOR_BY_ID[req.type === 'GA4_SERVER_SIDE' ? 'GA4' : req.type]
+        : null;
+
       const paramRows = [];
-      if (urlObj.searchParams) {
-        urlObj.searchParams.forEach((val, key) => {
-          let label = key;
-          let isHighlight = false;
+      const addParamRow = (key, val) => {
+        let label = key;
+        let isHighlight = false;
 
-          if (isGA4) {
-            // GA4 Mapping
-            if (GA4_PARAMS[key]) {
-              label = GA4_PARAMS[key];
-              isHighlight = true;
-            } else if (key.startsWith('ep.')) {
-              label = 'EP: ' + key.substring(3);
-              isHighlight = true;
-            } else if (key.startsWith('up.')) {
-              label = 'UP: ' + key.substring(3);
-            }
+        if (isGA4) {
+          // GA4 Mapping
+          if (GA4_PARAMS[key]) {
+            label = GA4_PARAMS[key];
+            isHighlight = true;
+          } else if (key.startsWith('ep.')) {
+            label = 'EP: ' + key.substring(3);
+            isHighlight = true;
+          } else if (key.startsWith('up.')) {
+            label = 'UP: ' + key.substring(3);
           }
+        } else if (paramVendor && paramVendor.params[key]) {
+          label = paramVendor.params[key];
+          isHighlight = true;
+        }
 
-          paramRows.push(`
-            <div class="param-key" style="${isHighlight ? 'color:var(--accent-blue);font-weight:600' : ''}">${label}:</div>
-            <div class="param-value" style="word-break:break-all">${val}</div>
+        paramRows.push(`
+            <div class="param-key" style="${isHighlight ? 'color:var(--accent-blue);font-weight:600' : ''}">${escapeHtml(label)}:</div>
+            <div class="param-value" style="word-break:break-all">${escapeHtml(val)}</div>
           `);
-        });
+      };
+
+      if (urlObj.searchParams) {
+        urlObj.searchParams.forEach((val, key) => addParamRow(key, val));
+      }
+      // POST body params (form-encoded hits decoded by the service worker)
+      if (req.bodyParams && typeof req.bodyParams === 'object') {
+        Object.entries(req.bodyParams).forEach(([key, val]) => addParamRow(key, String(val)));
       }
 
+      const vendorEvent = isGA4 ? urlObj.searchParams.get('en') : req.event;
       const badgeHtml = `
         <div class="network-badges">
           ${req.isServerSide ? '<span class="badge badge-server">Server-Side</span>' : ''}
           ${req.hasEnhancedConversions ? '<span class="badge badge-ec">Enhanced Conversions</span>' : ''}
-          ${isGA4 && urlObj.searchParams.get('en') ? `<span class="badge" style="background:var(--google-blue)">${urlObj.searchParams.get('en')}</span>` : ''}
+          ${vendorEvent ? `<span class="badge" style="background:var(--google-blue)">${escapeHtml(vendorEvent)}</span>` : ''}
+          ${req.eventId ? '<span class="badge" style="background:var(--success-green)" title="event_id present — server-side (CAPI) deduplication in play">CAPI dedup</span>' : ''}
+          ${req.accountId ? `<span class="badge" style="background:var(--bg-tertiary);color:var(--text-secondary)">${escapeHtml(req.accountId)}</span>` : ''}
         </div>
       `;
 
@@ -2483,6 +2540,13 @@ chrome.runtime.onMessage.addListener((message) => {
       renderNetworkRequests();
     } else if (currentTab === 'consent') {
       // Auto-refresh CSP if needed or nothing
+    }
+
+  } else if (message.type === 'NETWORK_REQUEST_UPDATE') {
+    const existing = networkRequests.find(r => r.id === message.data.id);
+    if (existing) {
+      Object.assign(existing, message.data);
+      if (currentTab === 'network') renderNetworkRequests();
     }
 
   } else if (message.type === MESSAGE_TYPES.TAB_UPDATED) {
@@ -2853,7 +2917,7 @@ function exportAsHAR() {
       version: '1.2',
       creator: {
         name: 'Tag Master',
-        version: '1.2.0'
+        version: chrome.runtime.getManifest().version
       },
       browser: {
         name: navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser',
@@ -3542,26 +3606,103 @@ async function loadConsentState() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
 
-    // Try to get consent state from page
+    // The content-script bridge resolves with the page's consent object directly
     const response = await chrome.tabs.sendMessage(tab.id, {
       type: 'GET_CONSENT_STATE'
     }).catch(() => null);
 
-    if (response?.consentState) {
-      consentState = response.consentState;
-      renderConsentState();
+    if (response && !response.error) {
+      consentState = response;
+    } else {
+      consentState = null;
     }
+    renderConsentState();
   } catch (e) {
     console.debug('[Tag Master] Failed to load consent state:', e);
   }
 }
 
-function renderConsentState() {
-  // This function can be expanded later to show consent state in UI
-  // For now, just store it in memory
-  if (consentState) {
-    console.log('[Tag Master] Consent state loaded:', consentState);
+// Consent signals that gate ad vendors: when these are denied, ad/social
+// pixels firing is a probable Consent Mode violation.
+const AD_CONSENT_KEYS = ['ad_storage', 'ad_user_data', 'ad_personalization'];
+
+function getConsentViolations() {
+  // Determine the latest reported ad_storage state from captured Google hits (gcs param)
+  let adStorageDenied = null;
+  for (let i = networkRequests.length - 1; i >= 0; i--) {
+    const req = networkRequests[i];
+    try {
+      const gcs = new URL(req.url).searchParams.get('gcs');
+      if (gcs && gcs.length >= 3) {
+        adStorageDenied = gcs.charAt(2) === '0';
+        break;
+      }
+    } catch (e) { /* skip */ }
   }
+  // Fall back to the page-read consent state (flat: {ad_storage: 'denied', ...})
+  if (adStorageDenied === null && consentState) {
+    if (consentState.ad_storage === 'denied') adStorageDenied = true;
+    else if (consentState.ad_storage === 'granted') adStorageDenied = false;
+  }
+  if (!adStorageDenied) return [];
+
+  // Any ad/social vendor hit while ad_storage is denied = probable violation
+  const offenders = new Map();
+  for (const req of networkRequests) {
+    const vendor = typeof TM_VENDOR_BY_ID !== 'undefined' ? TM_VENDOR_BY_ID[req.type] : null;
+    if (vendor && (vendor.category === 'ads' || vendor.category === 'social' || vendor.category === 'native')) {
+      offenders.set(vendor.name, (offenders.get(vendor.name) || 0) + 1);
+    }
+  }
+  return Array.from(offenders, ([name, count]) => ({ name, count }));
+}
+
+function renderConsentState() {
+  const container = document.getElementById('consentStatus');
+  if (!container) return;
+
+  const violations = getConsentViolations();
+  const parts = [];
+
+  const signalKeys = ['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization', 'functionality_storage', 'personalization_storage', 'security_storage'];
+  const hasAnySignal = consentState && signalKeys.some(k => consentState[k] && consentState[k] !== 'unknown');
+
+  if (hasAnySignal) {
+    const meta = consentState._metadata || {};
+    const signalCards = signalKeys.map(signal => {
+      const state = consentState[signal] || 'unknown';
+      const color = state === 'granted' ? 'var(--success-green)' : (state === 'denied' ? 'var(--error-red)' : 'var(--text-muted)');
+      return `
+        <div style="background:var(--bg-primary);padding:6px 8px;border-radius:4px;border:1px solid var(--border-light);font-size:10px">
+          <span style="color:var(--text-secondary);display:block;font-size:9px;text-transform:uppercase">${escapeHtml(signal)}</span>
+          <span style="font-weight:600;color:${color}">${escapeHtml(state)}</span>
+        </div>`;
+    }).join('');
+    parts.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">${signalCards}</div>`);
+    parts.push(`<div style="font-size:9px;color:var(--text-muted);margin-bottom:10px">
+      ${meta.hasDefault ? 'Default set' : 'No default'} · ${meta.hasUpdate ? 'Updated by user/CMP' : 'No update yet'}${meta.isBlocking ? ' · <span style="color:var(--warning-yellow)">blocking (waiting for update)</span>' : ''}
+    </div>`);
+  } else {
+    parts.push('<div class="empty-state"><p>No Consent Mode implementation detected on this page</p></div>');
+  }
+
+  if (violations.length) {
+    parts.push(`
+      <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:6px;border-left:4px solid var(--error-red)">
+        <div style="font-size:11px;font-weight:bold;color:var(--error-red)">⚠ Tags fired while ad consent was denied</div>
+        <div style="font-size:10px;color:var(--text-secondary)">
+          ${violations.map(v => `${escapeHtml(v.name)} (${v.count} hit${v.count > 1 ? 's' : ''})`).join(', ')}
+        </div>
+        <div style="font-size:9px;color:var(--text-muted)">ad_storage is denied but these vendors still sent tracking requests — probable Consent Mode / GDPR issue.</div>
+      </div>`);
+  }
+
+  container.innerHTML = parts.join('');
+}
+
+const refreshConsentBtn = document.getElementById('refreshConsent');
+if (refreshConsentBtn) {
+  refreshConsentBtn.addEventListener('click', loadConsentState);
 }
 
 
@@ -3641,7 +3782,7 @@ async function runAudit() {
 
   try {
     const perf = await chrome.runtime.sendMessage({ type: 'GET_PERFORMANCE_METRICS' });
-    if (perf) {
+    if (perf && perf.impactScore) {
       const perfColor = perf.impactScore === 'High' ? 'var(--error-red)' : (perf.impactScore === 'Medium' ? 'var(--warning-yellow)' : 'var(--success-green)');
       elements.auditResults.innerHTML = `
       <div class="container-item" style="flex-direction:column;align-items:flex-start;gap:8px;border-left:4px solid ${perfColor}" >
@@ -3706,12 +3847,34 @@ async function runAudit() {
     checks.push({ status: 'success', title: 'GA4 Active', desc: 'GA4 data collection hits detected.' });
   }
 
-  // 5. Martech Audit (TikTok, LinkedIn)
-  const ttHit = networkRequests.find(r => r.type === 'TIKTOK_PIXEL');
-  if (ttHit) checks.push({ status: 'success', title: 'TikTok Pixel', desc: 'TikTok tracking detected.' });
+  // 5. Server-Side Tagging (sGTM) Check
+  const sgtmHits = networkRequests.filter(r => r.isServerSide);
+  if (sgtmHits.length > 0) {
+    const sgtmHost = (() => { try { return new URL(sgtmHits[0].url).hostname; } catch (e) { return '?'; } })();
+    checks.push({ status: 'success', title: 'Server-Side Tagging (sGTM)', desc: `${sgtmHits.length} hit(s) routed through a first-party endpoint (${sgtmHost}).` });
+  }
 
-  const liHit = networkRequests.find(r => r.type === 'LINKEDIN_PIXEL');
-  if (liHit) checks.push({ status: 'success', title: 'LinkedIn Insight', desc: 'LinkedIn tracking detected.' });
+  // 6. Martech Audit — every non-Google vendor in the registry
+  if (typeof TM_VENDORS !== 'undefined') {
+    for (const vendor of TM_VENDORS) {
+      if (vendor.category === 'google') continue;
+      const hits = networkRequests.filter(r => r.type === vendor.id);
+      if (hits.length > 0) {
+        const account = hits.find(h => h.accountId)?.accountId;
+        checks.push({ status: 'success', title: vendor.name, desc: `${hits.length} hit(s) detected${account ? ` — ID: ${account}` : ''}.` });
+      }
+    }
+  }
+
+  // 7. Consent Violation Check (vendors firing while ad consent denied)
+  const consentViolations = getConsentViolations();
+  if (consentViolations.length > 0) {
+    checks.push({
+      status: 'error',
+      title: 'Consent Violation Risk',
+      desc: `ad_storage is denied but these vendors still fired: ${consentViolations.map(v => v.name).join(', ')}. Probable GDPR/Consent Mode issue.`
+    });
+  }
 
   renderAuditResults(checks);
   elements.runAudit.textContent = 'Run Scan';
