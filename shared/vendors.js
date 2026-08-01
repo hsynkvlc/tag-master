@@ -227,7 +227,9 @@
 
     // ---------------- Snap ----------------
     {
-      id: 'SNAP_PIXEL', name: 'Snap Pixel', category: 'social', color: '#FFFC00',
+      // Brand yellow (#FFFC00) is unreadable as text on light backgrounds;
+      // use a darkened amber that still reads as "Snap yellow"
+      id: 'SNAP_PIXEL', name: 'Snap Pixel', category: 'social', color: '#C7A600',
       match: [
         { host: /(^|\.)tr\.snapchat\.com$/ },
         { host: /(^|\.)sc-static\.net$/, path: /scevent/ }
@@ -239,7 +241,8 @@
 
     // ---------------- Twitter / X ----------------
     {
-      id: 'TWITTER_PIXEL', name: 'X / Twitter Pixel', category: 'social', color: '#14171A',
+      // Near-black brand color disappears on the dark theme; use X's gray-blue
+      id: 'TWITTER_PIXEL', name: 'X / Twitter Pixel', category: 'social', color: '#536471',
       match: [
         { host: /(^|\.)analytics\.(twitter|x)\.com$|^t\.co$/, path: /\/i\/adsct/ },
         { host: /(^|\.)static\.ads-twitter\.com$/ }

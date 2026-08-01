@@ -323,7 +323,11 @@
         e.preventDefault();
         e.stopPropagation();
 
-        const target = e.target;
+        // Climb to the actionable ancestor: clicking the icon/span inside a
+        // button should target the button — that's what a GTM click trigger needs
+        const raw = e.target;
+        const target = (raw.closest && raw.closest('a, button, [role="button"], [onclick], input[type="submit"], input[type="button"], label, [data-gtm]')) || raw;
+
         const selector = getCssSelector(target);
         const jsPath = getJsPath(target);
 
@@ -352,7 +356,15 @@
     }
 
     function onSelectorKey(e) {
-        if (e.key === 'Escape') disableSelectorMode();
+        if (e.key === 'Escape') {
+            // Tell the sidepanel so its pending pick doesn't hang until timeout
+            window.postMessage({
+                source: TAG_MASTER_ID,
+                type: 'SELECTOR_RESULT',
+                payload: { requestId: lastRequestId, error: 'Selection cancelled' }
+            }, '*');
+            disableSelectorMode();
+        }
     }
 
     function captureFromHighlight(requestId) {
@@ -387,12 +399,25 @@
         }, '*');
     }
 
+    // querySelectorAll throws on malformed selectors — never let that kill the
+    // picker (Tailwind's "hover:bg-blue-500" style classes used to do exactly that)
+    function matchCount(selector) {
+        try {
+            return document.querySelectorAll(selector).length;
+        } catch (e) {
+            return -1; // invalid selector
+        }
+    }
+
+    const cssEscape = (v) => (window.CSS && CSS.escape) ? CSS.escape(v) : v.replace(/([^a-zA-Z0-9_-])/g, '\\$1');
+
     function getCssSelector(el) {
         if (!(el instanceof Element)) return '';
 
         // 1. Try ID if stable
         if (el.id && !/^\d|ember|j_|[a-f0-9]{8}/i.test(el.id)) {
-            return `#${el.id}`;
+            const idSel = `#${cssEscape(el.id)}`;
+            if (matchCount(idSel) === 1) return idSel;
         }
 
         const path = [];
@@ -406,7 +431,7 @@
             let attrMatch = null;
             for (const attr of reliableAttrs) {
                 const val = current.getAttribute(attr);
-                if (val && !val.includes('{')) { // Avoid templates
+                if (val && !val.includes('{') && !val.includes('"')) { // Avoid templates & quote breakage
                     attrMatch = `[${attr}="${val}"]`;
                     break;
                 }
@@ -415,18 +440,21 @@
             if (attrMatch) {
                 selector += attrMatch;
                 // If this is unique enough, we can stop
-                if (document.querySelectorAll(selector).length === 1) {
+                if (matchCount(selector) === 1) {
                     path.unshift(selector);
                     break;
                 }
             } else if (current.id && !/^\d|ember|j_|[a-f0-9]{8}/i.test(current.id)) {
-                selector = `#${current.id}`;
+                selector = `#${cssEscape(current.id)}`;
                 path.unshift(selector);
                 break;
             } else if (current.classList.length > 0) {
-                // Use the most meaningful class
+                // Use the most meaningful classes (escaped — Tailwind variants
+                // like "hover:bg-blue-500" or "md:w-1/2" need it)
                 const classes = Array.from(current.classList)
                     .filter(c => !/^(hover|active|focus|valid|invalid|ng-|ember|j_)/.test(c))
+                    .slice(0, 3)
+                    .map(cssEscape)
                     .join('.');
                 if (classes) {
                     selector += '.' + classes;
@@ -435,7 +463,7 @@
 
             // Check if current relative path is unique
             const currentPath = selector + (path.length ? ' > ' + path.join(' > ') : '');
-            if (document.querySelectorAll(currentPath).length === 1) {
+            if (matchCount(currentPath) === 1) {
                 path.unshift(selector);
                 break;
             }
@@ -453,7 +481,7 @@
             current = current.parentNode;
 
             // Optimization: Don't go above body
-            if (current.nodeName === 'BODY' || current.nodeName === 'HTML') break;
+            if (!current || current.nodeName === 'BODY' || current.nodeName === 'HTML') break;
         }
 
         return path.join(' > ');
@@ -891,7 +919,9 @@
         const scripts = Array.from(document.querySelectorAll('script[src]')).map(s => s.src.toLowerCase());
         const allScripts = Array.from(document.querySelectorAll('script')).map(s => s.innerHTML || '');
         const links = Array.from(document.querySelectorAll('link[href]')).map(l => l.href.toLowerCase());
-        const html = document.documentElement.outerHTML.substring(0, 50000).toLowerCase();
+        // 200 KB window: on heavy e-commerce pages platform markers (generator
+        // meta rendered late, inline config blobs) often sit past the first 50 KB
+        const html = document.documentElement.outerHTML.substring(0, 200000).toLowerCase();
 
         const TECH_SIGNATURES = {
             // JavaScript Frameworks
@@ -1025,11 +1055,12 @@
             },
             'Shopify': {
                 globals: ['Shopify', 'ShopifyAnalytics'],
-                selector: 'link[href*="cdn.shopify.com"]',
+                selector: 'meta[name="shopify-digital-wallet"], link[href*="cdn.shopify.com"]',
                 scripts: ['cdn.shopify.com'],
                 category: 'E-commerce',
                 icon: 'https://cdn.simpleicons.org/shopify/7AB55C',
-                getVersion: () => window.Shopify?.theme?.name
+                getVersion: () => window.Shopify?.theme?.name,
+                getDetails: () => window.Shopify?.shop
             },
             'Webflow': {
                 globals: ['Webflow'],
@@ -1286,11 +1317,6 @@
                 category: 'E-commerce',
                 icon: 'https://cdn.simpleicons.org/prestashop/DF0067'
             },
-            'OpenCart': {
-                scripts: ['catalog/view/javascript'],
-                category: 'E-commerce',
-                icon: 'https://cdn.simpleicons.org/opencart/23A6DB'
-            },
             'Salesforce Commerce': {
                 globals: ['dw'],
                 scripts: ['demandware.static'],
@@ -1305,18 +1331,25 @@
                 icon: 'https://www.google.com/s2/favicons?domain=tsoft.com.tr&sz=64'
             },
             'İdeaSoft': {
-                globals: ['IdeasoftData', 'ideaJS'],
-                scripts: ['ideasoft.com.tr', 'mncdn.com/ideasoft'],
-                selector: 'meta[name="generator"][content*="ideasoft"], meta[name="generator"][content*="İdeaSoft"]',
+                globals: ['IdeasoftData', 'ideaJS', 'IdeaCart'],
+                scripts: ['ideasoft.com.tr', 'mncdn.com/ideasoft', 'ideacdn.net'],
+                selector: 'meta[name="generator"][content*="ideasoft" i], link[href*="ideacdn.net"]',
                 category: 'E-commerce',
                 icon: 'https://www.google.com/s2/favicons?domain=ideasoft.com.tr&sz=64'
             },
             'Ticimax': {
-                globals: ['Ticimax', 'TicimaxBasket'],
-                scripts: ['ticimax.com', 'ticimax.cloud'],
-                selector: 'meta[name="generator"][content*="Ticimax"]',
+                globals: ['Ticimax', 'TicimaxBasket', 'ticimax'],
+                scripts: ['ticimax.com', 'ticimax.cloud', 'ticimaxcdn.com'],
+                selector: 'meta[name="generator"][content*="Ticimax" i], link[href*="ticimax"]',
                 category: 'E-commerce',
                 icon: 'https://www.google.com/s2/favicons?domain=ticimax.com&sz=64'
+            },
+            'ikas': {
+                globals: ['ikas'],
+                scripts: ['cdn.myikas.com', 'ikas.com'],
+                selector: 'meta[name="generator"][content*="ikas" i]',
+                category: 'E-commerce',
+                icon: 'https://www.google.com/s2/favicons?domain=ikas.com&sz=64'
             },
             'N11': {
                 scripts: ['n11.com', 'n11cdn.com'],
@@ -1336,19 +1369,11 @@
                 category: 'E-commerce',
                 icon: 'https://www.google.com/s2/favicons?domain=gittigidiyor.com&sz=64'
             },
-            'Opencart': {
-                globals: ['common', 'catalog'],
-                scripts: ['catalog/view/javascript/common.js'],
+            'OpenCart': {
+                scripts: ['catalog/view/javascript'],
                 selector: 'meta[name="generator"][content*="OpenCart"]',
                 category: 'E-commerce',
                 icon: 'https://cdn.simpleicons.org/opencart/23A6DB'
-            },
-            'PrestaShop': {
-                globals: ['prestashop'],
-                scripts: ['prestashop'],
-                selector: 'meta[name="generator"][content*="PrestaShop"]',
-                category: 'E-commerce',
-                icon: 'https://cdn.simpleicons.org/prestashop/DF0067'
             },
             'Klaviyo': {
                 globals: ['klaviyo', '_learnq'],
@@ -1908,14 +1933,6 @@
             },
 
             // E-commerce (additions)
-            'Shopify': {
-                globals: ['Shopify', 'ShopifyAnalytics'],
-                scripts: ['cdn.shopify.com'],
-                selector: 'meta[name="shopify-digital-wallet"]',
-                category: 'E-commerce',
-                icon: 'https://cdn.simpleicons.org/shopify/7AB55C',
-                getDetails: () => window.Shopify?.shop
-            },
             'Ecwid': {
                 globals: ['Ecwid', 'ecwid_productBrowser'],
                 scripts: ['app.ecwid.com'],

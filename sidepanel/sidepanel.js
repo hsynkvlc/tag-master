@@ -2032,6 +2032,21 @@ function getRequestTypeStyle(request) {
     return { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#F9AB00', bgColor: 'rgba(249, 171, 0, 0.1)', label: 'GA4 (sGTM)' };
   }
 
+  // Google types by classified type — not by URL heuristics, which mislabel
+  // e.g. a conversion hit redirected to googleads.g.doubleclick.net
+  const GOOGLE_TYPE_STYLES = {
+    GA4: { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' },
+    UA: { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' },
+    GOOGLE_ADS_CONVERSION: { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' },
+    GOOGLE_ADS_REMARKETING: { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' },
+    FLOODLIGHT: { icon: '<img src="https://cdn.simpleicons.org/googlecampaignmanager360/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' },
+    GTM: { icon: '<img src="https://cdn.simpleicons.org/googletagmanager/246FDB" style="width:12px;height:12px;object-fit:contain;">', color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: request.isServerSide ? 'GTM (sGTM)' : 'GTM' },
+    DOUBLECLICK: { icon: '<svg viewBox="0 0 24 24" fill="#EC4899" style="width:12px;height:12px"><circle cx="12" cy="12" r="8"/></svg>', color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.1)', label: 'DoubleClick' }
+  };
+  if (GOOGLE_TYPE_STYLES[request.type]) {
+    return GOOGLE_TYPE_STYLES[request.type];
+  }
+
   // CHECK DETECTED TECHNOLOGIES FIRST
   if (currentTabId && techCacheMap.has(currentTabId)) {
     const detected = techCacheMap.get(currentTabId).data || [];
@@ -2453,7 +2468,7 @@ if (elements.clearNetwork) {
 elements.pickElementBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
-    chrome.tabs.sendMessage(tab.id, { type: 'SELECTOR_START' });
+    chrome.tabs.sendMessage(tab.id, { type: 'SELECTOR_START' }, { frameId: 0 });
     showToast('Click an element on the page', 'info');
   }
 });
@@ -2461,7 +2476,7 @@ elements.pickElementBtn.addEventListener('click', async () => {
 elements.captureHighlightBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
-    chrome.tabs.sendMessage(tab.id, { type: 'SELECTOR_FROM_HIGHLIGHT' });
+    chrome.tabs.sendMessage(tab.id, { type: 'SELECTOR_FROM_HIGHLIGHT' }, { frameId: 0 });
   }
 });
 
@@ -3609,7 +3624,7 @@ async function loadConsentState() {
     // The content-script bridge resolves with the page's consent object directly
     const response = await chrome.tabs.sendMessage(tab.id, {
       type: 'GET_CONSENT_STATE'
-    }).catch(() => null);
+    }, { frameId: 0 }).catch(() => null);
 
     if (response && !response.error) {
       consentState = response;
@@ -3722,7 +3737,7 @@ if (clearCookiesBtn) {
       if (tab) {
         await chrome.tabs.sendMessage(tab.id, {
           type: 'CLEAR_GOOGLE_COOKIES'
-        });
+        }, { frameId: 0 });
         showToast('Google Cookies Cleared', 'success');
         setTimeout(() => chrome.tabs.reload(tab.id), 1000);
       }
@@ -3762,7 +3777,7 @@ if (blockGA4Btn) {
         await chrome.tabs.sendMessage(tab.id, {
           type: 'BLOCK_GA4_HITS',
           enabled
-        });
+        }, { frameId: 0 });
       }
     } catch (e) {
       console.error('Failed to toggle GA4 block', e);

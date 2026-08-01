@@ -542,7 +542,7 @@ async function handleMessage(message, sender) {
         return await chrome.tabs.sendMessage(execTab.id, {
           type: MESSAGE_TYPES.CODE_EXECUTE,
           code: message.code
-        });
+        }, { frameId: 0 });
       }
       return { error: 'No active tab' };
 
@@ -553,7 +553,7 @@ async function handleMessage(message, sender) {
           // Forward to page script via content script
           const result = await chrome.tabs.sendMessage(consentTab.id, {
             type: 'GET_CONSENT_STATE'
-          });
+          }, { frameId: 0 });
           return result || { error: 'No consent data' };
         } catch (e) {
           return { error: 'Failed to access tab' };
@@ -565,7 +565,7 @@ async function handleMessage(message, sender) {
       const [cspTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (cspTab) {
         try {
-          const result = await chrome.tabs.sendMessage(cspTab.id, { type: 'GET_CSP' });
+          const result = await chrome.tabs.sendMessage(cspTab.id, { type: 'GET_CSP' }, { frameId: 0 });
           return result || { csp: '' };
         } catch (e) {
           return { csp: '', error: 'Failed to get CSP' };
@@ -584,11 +584,13 @@ async function handleMessage(message, sender) {
             return { technologies: [], error: 'Unsupported page type' };
           }
 
-          // 1. Try sending message to already injected content script
+          // 1. Try sending message to already injected content script.
+          // frameId: 0 is critical — without it every frame's content script
+          // answers and a fast (empty) iframe response wins the race.
           try {
             // Use a promise wrapper to handle potential message channel closing or hung scripts
             const result = await Promise.race([
-              chrome.tabs.sendMessage(techTabId, { type: 'DETECT_TECH' }),
+              chrome.tabs.sendMessage(techTabId, { type: 'DETECT_TECH' }, { frameId: 0 }),
               new Promise((_, reject) => setTimeout(() => reject(new Error('Background timeout')), 16000))
             ]);
 
@@ -620,8 +622,8 @@ async function handleMessage(message, sender) {
             // Wait for scripts to initialize completely
             await new Promise(r => setTimeout(r, 500));
 
-            // 3. Retry the message
-            const retryResult = await chrome.tabs.sendMessage(techTabId, { type: 'DETECT_TECH' });
+            // 3. Retry the message (main frame only)
+            const retryResult = await chrome.tabs.sendMessage(techTabId, { type: 'DETECT_TECH' }, { frameId: 0 });
             return retryResult || { technologies: [] };
           } catch (injectError) {
             console.warn('[Tag Master] Script injection failed:', injectError.message);
@@ -638,7 +640,7 @@ async function handleMessage(message, sender) {
       const [perfTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (perfTab) {
         try {
-          return await chrome.tabs.sendMessage(perfTab.id, { type: 'GET_PERFORMANCE_METRICS' });
+          return await chrome.tabs.sendMessage(perfTab.id, { type: 'GET_PERFORMANCE_METRICS' }, { frameId: 0 });
         } catch (e) {
           return null;
         }
