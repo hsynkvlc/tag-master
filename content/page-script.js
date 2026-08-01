@@ -850,9 +850,13 @@
 
                 matches.forEach((match, index) => {
                     const scriptContent = match[1].trim();
-                    if (scriptContent) {
-                        // Check if it's an external script
-                        const srcMatch = match[0].match(/src=["']([^"']+)["']/);
+                    if (scriptContent || /src=/i.test(match[0].match(/^<script[^>]*>/i)?.[0] || '')) {
+                        // External only when the src attribute is on the OPENING TAG.
+                        // Matching src= anywhere used to hit the j.src='…gtm.js?id='
+                        // string INSIDE the standard inline snippet and load gtm.js
+                        // with an empty container id.
+                        const openingTag = match[0].match(/^<script[^>]*>/i)?.[0] || '';
+                        const srcMatch = openingTag.match(/src=["']([^"']+)["']/);
 
                         if (srcMatch) {
                             // External script - inject as-is from user snippet

@@ -764,6 +764,7 @@ elements.injectBtn.addEventListener('click', async () => {
 
     if (response?.success) {
       showToast(`GTM ${validation.gtmId} injected!`, 'success');
+      saveSnippetToLibrary(validation.gtmId, snippet);
       elements.gtmSnippetInput.value = '';
       document.getElementById('snippetStatus').textContent = '';
 
@@ -783,6 +784,16 @@ elements.injectBtn.addEventListener('click', async () => {
             }
           });
           checkActiveInjection();
+
+          // gtm_debug alone never establishes a debug session in modern GTM —
+          // the connection must originate from Tag Assistant. Open it with the
+          // container + page prefilled; persistence above guarantees the
+          // injected container survives Tag Assistant's reload and connects.
+          if (elements.previewMode.checked) {
+            const taUrl = `https://tagassistant.google.com/#/?id=${validation.gtmId}&url=${encodeURIComponent(tab.url)}&source=TAG_MASTER`;
+            chrome.tabs.create({ url: taUrl });
+            showToast('Tag Assistant opened — click Connect there to start debugging', 'info');
+          }
         } catch (e) { console.error('Storage save failed', e); }
       }
 
@@ -795,7 +806,65 @@ elements.injectBtn.addEventListener('click', async () => {
   }
 });
 
-// Recent IDs removed - now using snippet-based injection
+// ============================================
+// Saved Snippet Library
+// Stores only snippets the user pasted themselves — reuse is one click,
+// but the code always originates from the user (store-policy compliant).
+// ============================================
+async function saveSnippetToLibrary(gtmId, snippet) {
+  const stored = await chrome.storage.local.get('tm_saved_snippets');
+  const saved = stored.tm_saved_snippets || {};
+  saved[gtmId] = { snippet, lastUsed: Date.now() };
+  // Keep the 10 most recently used
+  Object.keys(saved)
+    .sort((a, b) => (saved[b].lastUsed || 0) - (saved[a].lastUsed || 0))
+    .slice(10)
+    .forEach(id => delete saved[id]);
+  await chrome.storage.local.set({ tm_saved_snippets: saved });
+  renderSavedSnippets();
+}
+
+async function renderSavedSnippets() {
+  const wrap = document.getElementById('savedSnippets');
+  const list = document.getElementById('savedSnippetsList');
+  if (!wrap || !list) return;
+
+  const stored = await chrome.storage.local.get('tm_saved_snippets');
+  const saved = stored.tm_saved_snippets || {};
+  const ids = Object.keys(saved).sort((a, b) => (saved[b].lastUsed || 0) - (saved[a].lastUsed || 0));
+
+  if (!ids.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  list.innerHTML = ids.map(id => `
+    <div style="display:flex;align-items:center;gap:4px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px">
+      <button class="saved-snippet-use" data-gtm-id="${escapeHtml(id)}" title="Fill the editor with this snippet"
+        style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--accent-blue);font-family:monospace;padding:0">${escapeHtml(id)}</button>
+      <button class="saved-snippet-remove" data-gtm-id="${escapeHtml(id)}" title="Remove from saved"
+        style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:12px;line-height:1;padding:0 2px">×</button>
+    </div>`).join('');
+
+  list.querySelectorAll('.saved-snippet-use').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const store = await chrome.storage.local.get('tm_saved_snippets');
+      const entry = store.tm_saved_snippets?.[btn.dataset.gtmId];
+      if (entry) {
+        elements.gtmSnippetInput.value = entry.snippet;
+        elements.gtmSnippetInput.dispatchEvent(new Event('input'));
+        showToast(`${btn.dataset.gtmId} loaded — click Inject`, 'info');
+      }
+    });
+  });
+  list.querySelectorAll('.saved-snippet-remove').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const store = await chrome.storage.local.get('tm_saved_snippets');
+      const saved2 = store.tm_saved_snippets || {};
+      delete saved2[btn.dataset.gtmId];
+      await chrome.storage.local.set({ tm_saved_snippets: saved2 });
+      renderSavedSnippets();
+    });
+  });
+}
+renderSavedSnippets();
 
 let detectionRetries = 0;
 const MAX_RETRIES = 3;

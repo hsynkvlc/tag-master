@@ -251,17 +251,25 @@
 <!-- End Google Tag Manager -->"
                 style="width:100%;min-height:160px;font-family:monospace;font-size:11px;resize:vertical;text-align:left;box-sizing:border-box"></textarea>
               <div id="snippetStatus" style="margin-top:6px;font-size:11px;color:var(--text-muted)"></div>
+              <!-- Snippets you've injected before: paste once, reuse with one click -->
+              <div id="savedSnippets" style="margin-top:8px;display:none">
+                <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Saved containers</div>
+                <div id="savedSnippetsList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
-              <label class="checkbox-container">
+              <label class="checkbox-container" title="Remove the site's own GTM container before injecting yours">
                 <input type="checkbox" id="overrideExisting">
-                <span class="checkbox-label">Persistent</span>
+                <span class="checkbox-label">Replace existing GTM</span>
               </label>
-              <label class="checkbox-container">
+              <label class="checkbox-container" title="After injecting, opens Tag Assistant so you can connect a debug session">
                 <input type="checkbox" id="previewMode">
-                <span class="checkbox-label">Debug Mode</span>
+                <span class="checkbox-label">Debug via Tag Assistant</span>
               </label>
             </div>
+            <p style="font-size:10px;color:var(--text-muted);margin:6px 0 0">
+              Injection persists across reloads on this site until you remove it. With debug on, Tag Assistant opens — click <b>Connect</b> there to start the preview session.
+            </p>
             <button class="btn" id="injectBtn" style="width:100%;gap:8px;font-weight:700">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 style="width:14px;height:14px">
