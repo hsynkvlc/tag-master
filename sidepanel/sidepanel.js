@@ -4078,6 +4078,12 @@ async function checkWelcome() {
   }
 }
 
+// Welcome overlay version comes from the manifest (single source of truth)
+const welcomeVersionEl = document.getElementById('welcomeVersion');
+if (welcomeVersionEl) {
+  welcomeVersionEl.textContent = 'v' + chrome.runtime.getManifest().version;
+}
+
 if (elements.getStartedBtn) {
   elements.getStartedBtn.addEventListener('click', () => {
     // UI First - Immediate feedback
