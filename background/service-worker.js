@@ -362,6 +362,68 @@ async function addRecentGTMId(gtmId) {
 }
 
 // ============================================
+// Hit Blocker + GA4 DebugView (declarativeNetRequest dynamic rules)
+// ============================================
+const DEBUG_MODE_RULE_ID = 9999;
+
+async function syncBlockRules() {
+  const { tmBlockedVendors = [], tmGa4Debug = false } =
+    await chrome.storage.local.get(['tmBlockedVendors', 'tmGa4Debug']);
+
+  const rules = [];
+  let id = 1;
+  const resourceTypes = ['image', 'script', 'xmlhttprequest', 'ping', 'sub_frame', 'media', 'other'];
+
+  for (const vendorId of tmBlockedVendors) {
+    const spec = TM_BLOCK_RULES[vendorId];
+    if (!spec) continue;
+    if (spec.domains) {
+      rules.push({
+        id: id++,
+        priority: 1,
+        action: { type: 'block' },
+        condition: { requestDomains: spec.domains, resourceTypes }
+      });
+    }
+    if (spec.urlFilters) {
+      for (const filter of spec.urlFilters) {
+        rules.push({
+          id: id++,
+          priority: 1,
+          action: { type: 'block' },
+          condition: { urlFilter: filter, resourceTypes }
+        });
+      }
+    }
+  }
+
+  if (tmGa4Debug) {
+    // Append _dbg=1 to GA4 hits -> events land in DebugView. addOrReplaceParams
+    // is loop-safe: once the param is present the redirect is a no-op.
+    rules.push({
+      id: DEBUG_MODE_RULE_ID,
+      priority: 2,
+      action: {
+        type: 'redirect',
+        redirect: { transform: { queryTransform: { addOrReplaceParams: [{ key: '_dbg', value: '1' }] } } }
+      },
+      condition: {
+        urlFilter: '/g/collect',
+        requestDomains: ['google-analytics.com', 'analytics.google.com'],
+        resourceTypes
+      }
+    });
+  }
+
+  const existing = await chrome.declarativeNetRequest.getDynamicRules();
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: existing.map(r => r.id),
+    addRules: rules
+  });
+  return { blockedVendors: tmBlockedVendors, ga4Debug: tmGa4Debug, ruleCount: rules.length };
+}
+
+// ============================================
 // Message Handler
 // ============================================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -636,6 +698,21 @@ async function handleMessage(message, sender) {
       }
       return { technologies: [], error: 'No active tab' };
 
+    case 'SET_BLOCK_RULES':
+      await chrome.storage.local.set({
+        tmBlockedVendors: message.blockedVendors || [],
+        tmGa4Debug: !!message.ga4Debug
+      });
+      return await syncBlockRules();
+
+    case 'GET_BLOCK_RULES': {
+      const stored = await chrome.storage.local.get(['tmBlockedVendors', 'tmGa4Debug']);
+      return {
+        blockedVendors: stored.tmBlockedVendors || [],
+        ga4Debug: !!stored.tmGa4Debug
+      };
+    }
+
     case 'GET_PERFORMANCE_METRICS': {
       const [perfTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (perfTab) {
@@ -699,6 +776,7 @@ chrome.webRequest.onErrorOccurred.addListener(
   (details) => {
     patchCapturedRequest(details, {
       error: details.error,
+      blocked: details.error === 'net::ERR_BLOCKED_BY_CLIENT',
       statusCode: 0
     });
     requestIdIndex.delete(details.requestId);
@@ -753,6 +831,7 @@ async function initialize() {
     await initDatabase();
     await loadSettings();
     await startSession();
+    await syncBlockRules();
   } catch (error) {
     console.error('[Tag Master] Initialization error:', error);
   }

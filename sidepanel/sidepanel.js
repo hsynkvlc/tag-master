@@ -2270,7 +2270,7 @@ function renderNetworkRequests() {
              <span style="font-size:12px;">${requestStyle.icon}</span>
              <span>${requestStyle.label}</span>
            </span>
-           <span class="network-status ${isSuccess ? 'success' : 'error'}">${req.statusCode || (req.error ? 'ERR' : '...')}</span>
+           <span class="network-status ${isSuccess ? 'success' : 'error'}">${req.blocked ? 'BLOCKED' : (req.statusCode || (req.error ? 'ERR' : '...'))}</span>
            <span style="margin-left:auto;font-size:10px;color:var(--text-muted)">${formatTimestamp(req.timestamp)}</span>
         </div>
         <div class="network-url" title="${req.url}">${urlObj.pathname}</div>
@@ -3881,7 +3881,23 @@ async function runAudit() {
     }
   }
 
-  // 7. Consent Violation Check (vendors firing while ad consent denied)
+  // 7. Attribution / click-ID params on the current page URL
+  const CLICK_ID_KEYS = ['gclid', 'gbraid', 'wbraid', 'dclid', 'fbclid', 'ttclid', 'msclkid', 'li_fat_id', 'epik', 'ScCid', 'twclid', 'tblci'];
+  try {
+    const [audTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (audTab?.url) {
+      const pageParams = new URL(audTab.url).searchParams;
+      const foundAttribution = [];
+      pageParams.forEach((val, key) => {
+        if (key.startsWith('utm_') || CLICK_ID_KEYS.includes(key)) foundAttribution.push(key);
+      });
+      if (foundAttribution.length) {
+        checks.push({ status: 'success', title: 'Attribution Params', desc: `Present on page URL: ${foundAttribution.join(', ')}.` });
+      }
+    }
+  } catch (e) { /* restricted URL */ }
+
+  // 8. Consent Violation Check (vendors firing while ad consent denied)
   const consentViolations = getConsentViolations();
   if (consentViolations.length > 0) {
     checks.push({
@@ -4091,6 +4107,77 @@ async function checkWelcome() {
       elements.welcomeOverlay.style.display = 'none';
     }
   }
+}
+
+// ============================================
+// Hit Blocker (declarativeNetRequest, vendor-level)
+// ============================================
+async function initHitBlocker() {
+  const list = document.getElementById('hitBlockerList');
+  const dbgToggle = document.getElementById('ga4DebugToggle');
+  if (!list || typeof TM_BLOCK_RULES === 'undefined') return;
+
+  const state = await chrome.runtime.sendMessage({ type: 'GET_BLOCK_RULES' }).catch(() => null)
+    || { blockedVendors: [], ga4Debug: false };
+
+  const blockableIds = Object.keys(TM_BLOCK_RULES);
+  list.innerHTML = blockableIds.map(id => {
+    const vendor = TM_VENDOR_BY_ID[id];
+    if (!vendor) return '';
+    const checked = state.blockedVendors.includes(id) ? 'checked' : '';
+    return `
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;padding:6px 8px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;cursor:pointer">
+        <input type="checkbox" class="block-vendor-cb" data-vendor="${id}" ${checked} style="cursor:pointer">
+        <span style="width:8px;height:8px;border-radius:50%;background:${vendor.color};flex-shrink:0"></span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(vendor.name)}</span>
+      </label>`;
+  }).join('');
+
+  if (dbgToggle) dbgToggle.checked = !!state.ga4Debug;
+
+  async function saveBlockRules() {
+    const blockedVendors = Array.from(list.querySelectorAll('.block-vendor-cb:checked')).map(cb => cb.dataset.vendor);
+    const ga4Debug = !!dbgToggle?.checked;
+    const result = await chrome.runtime.sendMessage({ type: 'SET_BLOCK_RULES', blockedVendors, ga4Debug }).catch(() => null);
+    if (result) {
+      showToast(blockedVendors.length
+        ? `Blocking ${blockedVendors.length} vendor(s)${ga4Debug ? ' · DebugView on' : ''}`
+        : (ga4Debug ? 'DebugView mode on' : 'All vendors unblocked'), 'success');
+    } else {
+      showToast('Failed to update block rules', 'error');
+    }
+  }
+
+  list.addEventListener('change', saveBlockRules);
+  if (dbgToggle) dbgToggle.addEventListener('change', saveBlockRules);
+}
+initHitBlocker();
+
+// ============================================
+// CSV Export (spreadsheet-friendly flat rows)
+// ============================================
+const exportCsvBtn = document.getElementById('exportCsvBtn');
+if (exportCsvBtn) {
+  exportCsvBtn.addEventListener('click', () => {
+    if (!networkRequests.length) { showToast('No requests to export', 'error'); return; }
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [['timestamp', 'vendor', 'type', 'event', 'account_id', 'method', 'status', 'server_side', 'url'].join(',')];
+    for (const req of networkRequests) {
+      rows.push([
+        esc(new Date(req.timestamp).toISOString()),
+        esc(req.typeName), esc(req.type), esc(req.event), esc(req.accountId),
+        esc(req.method), esc(req.blocked ? 'BLOCKED' : (req.statusCode ?? '')),
+        esc(req.isServerSide ? 'yes' : 'no'), esc(req.url)
+      ].join(','));
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tag-master-requests-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast(`Exported ${networkRequests.length} requests as CSV`, 'success');
+  });
 }
 
 // Welcome overlay version comes from the manifest (single source of truth)

@@ -279,11 +279,160 @@
       accountParam: 'marketerId', eventParam: 'name',
       params: { marketerId: 'Marketer ID', name: 'Event Name', dl: 'Page URL', orderId: 'Order ID', orderValue: 'Order Value', currency: 'Currency', optOut: 'Opt-Out' },
       cookies: []
+    },
+
+    // ---------------- Adobe Analytics ----------------
+    {
+      id: 'ADOBE_ANALYTICS', name: 'Adobe Analytics', category: 'analytics', color: '#EB1000',
+      match: [
+        { host: /(^|\.)(sc\.omtrdc\.net|2o7\.net)$|\.sc\.omtrdc\.net$/, path: /\/b\/ss\// },
+        { host: /(^|\.)omtrdc\.net$/ }
+      ],
+      accountParam: null, eventParam: 'events',
+      params: { events: 'Events', products: 'Products', pageName: 'Page Name', ch: 'Site Section', g: 'Page URL', r: 'Referrer', vid: 'Visitor ID', pe: 'Link Type', pev2: 'Link Name' },
+      cookies: ['s_cc', 's_sq', 's_vi'],
+      // report suite id is the path segment after /b/ss/
+      extract: function (u) {
+        var m = u.pathname.match(/\/b\/ss\/([^/]+)\//);
+        return m ? { accountId: m[1] } : null;
+      }
+    },
+    {
+      id: 'ADOBE_LAUNCH', name: 'Adobe Launch / DTM', category: 'analytics', color: '#FA0F00',
+      match: [{ host: /(^|\.)assets\.adobedtm\.com$/ }],
+      accountParam: null, eventParam: null, params: {}, cookies: []
+    },
+
+    // ---------------- Tealium ----------------
+    {
+      id: 'TEALIUM', name: 'Tealium', category: 'analytics', color: '#0A7C8F',
+      match: [
+        { host: /(^|\.)tags\.tiqcdn\.com$/ },
+        { host: /(^|\.)collect\.tealiumiq\.com$/ }
+      ],
+      accountParam: null, eventParam: null,
+      params: { 'tealium_account': 'Account', 'tealium_profile': 'Profile', 'tealium_event': 'Event' },
+      cookies: ['utag_main'],
+      // utag.js URL: tags.tiqcdn.com/utag/{account}/{profile}/{env}/utag.js
+      extract: function (u) {
+        var m = u.pathname.match(/\/utag\/([^/]+)\/([^/]+)\//);
+        return m ? { accountId: m[1] + '/' + m[2] } : null;
+      }
+    },
+
+    // ---------------- Segment ----------------
+    {
+      id: 'SEGMENT', name: 'Segment', category: 'analytics', color: '#52BD95',
+      match: [
+        { host: /(^|\.)api\.segment\.io$/ },
+        { host: /(^|\.)cdn\.segment\.com$/ }
+      ],
+      accountParam: null, eventParam: null, bodyType: 'json',
+      params: {},
+      cookies: ['ajs_anonymous_id', 'ajs_user_id'],
+      extractFromBody: function (body) {
+        if (!body || typeof body !== 'object') return null;
+        return {
+          event: body.event || body.type || null,
+          accountId: body.writeKey || null
+        };
+      }
+    },
+
+    // ---------------- Amplitude ----------------
+    {
+      id: 'AMPLITUDE', name: 'Amplitude', category: 'analytics', color: '#1E61F0',
+      match: [{ host: /(^|\.)api2?\.amplitude\.com$/ }],
+      accountParam: null, eventParam: null, bodyType: 'json',
+      params: {},
+      cookies: ['AMP_'],
+      extractFromBody: function (body) {
+        if (!body || typeof body !== 'object') return null;
+        var first = Array.isArray(body.events) ? body.events[0] : null;
+        return {
+          event: (first && first.event_type) || null,
+          accountId: body.api_key ? body.api_key.substring(0, 8) + '…' : null
+        };
+      }
+    },
+
+    // ---------------- Mixpanel ----------------
+    {
+      id: 'MIXPANEL', name: 'Mixpanel', category: 'analytics', color: '#7856FF',
+      match: [{ host: /(^|\.)api(-js)?\.mixpanel\.com$/ }],
+      accountParam: null, eventParam: null,
+      params: { data: 'Payload (base64/JSON)' },
+      cookies: ['mp_']
+    },
+
+    // ---------------- Matomo (self-hosted -> host-agnostic path match) ----------------
+    {
+      id: 'MATOMO', name: 'Matomo', category: 'analytics', color: '#3450A3',
+      match: [{ host: /./, path: /\/(matomo|piwik)\.php$/ }],
+      accountParam: 'idsite', eventParam: 'e_a',
+      params: { idsite: 'Site ID', rec: 'Recording', action_name: 'Page Title', url: 'Page URL', e_c: 'Event Category', e_a: 'Event Action', e_n: 'Event Name', e_v: 'Event Value', _id: 'Visitor ID' },
+      cookies: ['_pk_id', '_pk_ses']
+    },
+
+    // ---------------- Yandex Metrica ----------------
+    {
+      id: 'YANDEX_METRICA', name: 'Yandex Metrica', category: 'analytics', color: '#FC3F1D',
+      match: [{ host: /(^|\.)mc\.yandex\.(ru|com)$/ }],
+      accountParam: null, eventParam: null,
+      params: { 'page-url': 'Page URL', charset: 'Charset' },
+      cookies: ['_ym_uid', '_ym_d'],
+      // counter id is the path segment after /watch/
+      extract: function (u) {
+        var m = u.pathname.match(/\/watch\/(\d+)/);
+        return m ? { accountId: m[1] } : null;
+      }
+    },
+
+    // ---------------- Hotjar ----------------
+    {
+      id: 'HOTJAR', name: 'Hotjar', category: 'analytics', color: '#FF3C00',
+      match: [
+        { host: /(^|\.)static\.hotjar\.com$/ },
+        { host: /(^|\.)(in|vc|metrics)\.hotjar\.(com|io)$/ }
+      ],
+      accountParam: null, eventParam: null, params: {}, cookies: ['_hj']
     }
   ];
 
   const TM_VENDOR_BY_ID = {};
   TM_VENDORS.forEach(function (v) { TM_VENDOR_BY_ID[v.id] = v; });
+
+  // Per-vendor blocking conditions for declarativeNetRequest dynamic rules.
+  // domains -> DNR requestDomains (covers subdomains); urlFilters for
+  // host-agnostic vendors (self-hosted Matomo, sGTM-proxied GA4 paths).
+  const TM_BLOCK_RULES = {
+    GA4: { domains: ['google-analytics.com', 'analytics.google.com'], urlFilters: ['/g/collect', '/mp/collect'] },
+    UA: { domains: ['google-analytics.com'] },
+    GOOGLE_ADS_CONVERSION: { domains: ['googleadservices.com'] },
+    FLOODLIGHT: { domains: ['doubleclick.net'] },
+    DOUBLECLICK: { domains: ['doubleclick.net'] },
+    META_PIXEL: { domains: ['facebook.com', 'connect.facebook.net'] },
+    TIKTOK_PIXEL: { domains: ['analytics.tiktok.com'] },
+    LINKEDIN_PIXEL: { domains: ['px.ads.linkedin.com', 'snap.licdn.com'] },
+    ADFORM: { domains: ['adform.net'] },
+    RTB_HOUSE: { domains: ['creativecdn.com'] },
+    CRITEO: { domains: ['criteo.com', 'criteo.net'] },
+    BING_UET: { domains: ['bat.bing.com'] },
+    PINTEREST: { domains: ['ct.pinterest.com', 's.pinimg.com'] },
+    SNAP_PIXEL: { domains: ['tr.snapchat.com', 'sc-static.net'] },
+    TWITTER_PIXEL: { domains: ['analytics.twitter.com', 'analytics.x.com', 'static.ads-twitter.com'] },
+    TABOOLA: { domains: ['taboola.com'] },
+    OUTBRAIN: { domains: ['outbrain.com'] },
+    ADOBE_ANALYTICS: { domains: ['omtrdc.net', '2o7.net'] },
+    ADOBE_LAUNCH: { domains: ['assets.adobedtm.com'] },
+    TEALIUM: { domains: ['tiqcdn.com', 'tealiumiq.com'] },
+    SEGMENT: { domains: ['segment.io', 'segment.com'] },
+    AMPLITUDE: { domains: ['amplitude.com'] },
+    MIXPANEL: { domains: ['mixpanel.com'] },
+    MATOMO: { urlFilters: ['/matomo.php', '/piwik.php'] },
+    YANDEX_METRICA: { domains: ['mc.yandex.ru', 'mc.yandex.com'] },
+    HOTJAR: { domains: ['hotjar.com', 'hotjar.io'] }
+  };
 
   // Aggregated first-party cookie prefixes across all vendors (+ sGTM cookies)
   const TM_TRACKING_COOKIE_PREFIXES = ['FPID', 'FPLC', '_gcl', '_gac'];
@@ -389,6 +538,7 @@
 
   globalThis.TM_VENDORS = TM_VENDORS;
   globalThis.TM_VENDOR_BY_ID = TM_VENDOR_BY_ID;
+  globalThis.TM_BLOCK_RULES = TM_BLOCK_RULES;
   globalThis.TM_TRACKING_COOKIE_PREFIXES = TM_TRACKING_COOKIE_PREFIXES;
   globalThis.TM_TRACKING_COOKIE_DOMAINS = TM_TRACKING_COOKIE_DOMAINS;
   globalThis.tmClassifyRequest = tmClassifyRequest;

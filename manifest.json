@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Tag Master",
-  "version": "1.3.0",
-  "description": "💍 One Extension to Rule Them All - GA4, GTM, Meta, TikTok, Adform & 15+ ad platforms + server-side GTM debugging",
+  "name": "Tag Master – GTM & GA4 Debugger, DataLayer Inspector",
+  "version": "1.4.0",
+  "description": "Debug GTM, GA4, dataLayer, Meta & 25+ pixels. Consent Mode V2 audit, server-side GTM detection, GTM injector, hit blocking.",
   "author": "hsynkvlc",
   "permissions": [
     "storage",
@@ -13,7 +13,8 @@
     "cookies",
     "webRequest",
     "webNavigation",
-    "activeTab"
+    "activeTab",
+    "declarativeNetRequest"
   ],
   "host_permissions": [
     "<all_urls>"

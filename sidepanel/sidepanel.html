@@ -435,6 +435,14 @@
               Tracking Requests
             </div>
             <div style="display:flex;gap:4px">
+              <button class="btn-icon" id="exportCsvBtn" title="Export as CSV (spreadsheet)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  style="width:14px;height:14px">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="9" y1="9" x2="9" y2="21" />
+                </svg>
+              </button>
               <button class="btn-icon" id="exportHar" title="Export as HAR">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                   style="width:14px;height:14px">
@@ -837,6 +845,30 @@
           </svg>
           Push to dataLayer
         </button>
+
+        <!-- Hit Blocker Section -->
+        <div class="section" style="margin-top:20px">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+            </svg>
+            Hit Blocker
+          </div>
+          <p style="font-size:10px;color:var(--text-muted);margin:8px 0 10px">
+            Block selected vendors' tracking hits so your testing never pollutes production data.
+          </p>
+          <div class="container-item" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:12px;font-weight:600">GA4 DebugView Mode</div>
+              <div style="font-size:10px;color:var(--text-muted)">Adds _dbg=1 to GA4 hits so events land in DebugView</div>
+            </div>
+            <input type="checkbox" id="ga4DebugToggle" style="width:16px;height:16px;cursor:pointer">
+          </div>
+          <div id="hitBlockerList" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <!-- vendor checkboxes injected -->
+          </div>
+        </div>
       </div>
 
       <!-- Settings Panel -->
