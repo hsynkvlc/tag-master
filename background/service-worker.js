@@ -748,6 +748,60 @@ async function handleMessage(message, sender) {
       return stored.tmSgtmPreview || { domain: '', token: '', enabled: false };
     }
 
+
+    case 'SET_VENDOR_DEBUG': {
+      const [dbgTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!dbgTab?.url) return { error: 'No active tab' };
+
+      const mode = TM_DEBUG_MODES.find(m => m.id === message.vendorId);
+      if (!mode) return { error: 'Unknown debug mode' };
+
+      const stored = await chrome.storage.local.get('tmVendorDebug');
+      const state = stored.tmVendorDebug || {};
+
+      if (message.enabled) {
+        let value = message.value || (typeof mode.value === 'function' ? mode.value() : mode.value);
+        if (mode.needsValue && !value) return { error: 'This mode needs a value from the platform UI' };
+        if (mode.validate && !mode.validate(value)) return { error: 'That value is not in the format this platform accepts' };
+        if (mode.format) value = mode.format(value);
+
+        if (mode.kind === 'cookie') {
+          const url = new URL(dbgTab.url);
+          await chrome.cookies.set({
+            url: url.origin,
+            domain: url.hostname,
+            path: '/',
+            name: mode.name,
+            value: String(value)
+          });
+        } else {
+          // localStorage lives in the page, so the content script writes it
+          await chrome.tabs.sendMessage(dbgTab.id, {
+            type: 'SET_PAGE_STORAGE', key: mode.name, value: String(value)
+          }, { frameId: 0 });
+        }
+        state[mode.id] = { value: String(value), host: new URL(dbgTab.url).hostname };
+      } else {
+        if (mode.kind === 'cookie') {
+          const url = new URL(dbgTab.url);
+          await chrome.cookies.remove({ url: url.origin, name: mode.name });
+        } else {
+          await chrome.tabs.sendMessage(dbgTab.id, {
+            type: 'SET_PAGE_STORAGE', key: mode.name, value: null
+          }, { frameId: 0 });
+        }
+        delete state[mode.id];
+      }
+
+      await chrome.storage.local.set({ tmVendorDebug: state });
+      return { success: true, state };
+    }
+
+    case 'GET_VENDOR_DEBUG': {
+      const stored = await chrome.storage.local.get('tmVendorDebug');
+      return stored.tmVendorDebug || {};
+    }
+
     case 'SET_BLOCK_RULES':
       await chrome.storage.local.set({
         tmBlockedVendors: message.blockedVendors || [],

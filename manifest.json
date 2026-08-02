@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Tag Master – GTM & GA4 Debugger, DataLayer Inspector",
-  "version": "1.4.0",
-  "description": "Debug GTM, GA4, dataLayer, Meta & 25+ pixels. Consent Mode V2 audit, server-side GTM detection, GTM injector, hit blocking.",
+  "version": "1.5.0",
+  "description": "Debug GTM, GA4, dataLayer, Meta & 40+ pixels. Consent Mode V2 audit, server-side GTM, per-platform test modes, GTM injector.",
   "author": "hsynkvlc",
   "permissions": [
     "storage",

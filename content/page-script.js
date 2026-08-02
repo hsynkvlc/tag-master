@@ -231,6 +231,21 @@
                 reply('PREVIEW_STATUS', getPreviewStatus());
                 break;
 
+            case 'SET_PAGE_STORAGE':
+                // Some platforms read their debug flag from localStorage at
+                // init, so it has to be written in the page's own context.
+                try {
+                    if (payload.value === null) {
+                        window.localStorage.removeItem(payload.key);
+                    } else {
+                        window.localStorage.setItem(payload.key, payload.value);
+                    }
+                    reply('PAGE_STORAGE_SET', { success: true });
+                } catch (error) {
+                    reply('PAGE_STORAGE_SET', { success: false, error: error.message });
+                }
+                break;
+
             case 'CLEAR_GOOGLE_COOKIES':
                 clearGoogleCookies();
                 reply('COOKIES_CLEARED', { success: true });

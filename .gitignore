@@ -38,3 +38,8 @@ CLAUDE.md
 
 # Tests (development only)
 tests/
+
+# Local marketing and store material, not part of the extension
+images/
+reddit-assets/
+store-assets/

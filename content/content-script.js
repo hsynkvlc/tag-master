@@ -178,6 +178,12 @@
       case 'GET_PREVIEW_STATUS':
         return await sendCommand('GET_PREVIEW_STATUS');
 
+      case 'SET_PAGE_STORAGE':
+        return await sendCommand('SET_PAGE_STORAGE', {
+          key: message.key,
+          value: message.value
+        });
+
       case 'CLEAR_GOOGLE_COOKIES':
         return await sendCommand('CLEAR_GOOGLE_COOKIES');
 

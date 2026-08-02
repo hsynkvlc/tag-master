@@ -4331,6 +4331,60 @@ async function initSgtmPreview() {
 initSgtmPreview();
 
 // ============================================
+// Platform Debug Modes
+// Each platform has its own answer to "show me my test events". Some need a
+// code from that platform's UI; the rest are a single switch.
+// ============================================
+async function initVendorDebugModes() {
+  const list = document.getElementById('vendorDebugList');
+  if (!list || typeof TM_DEBUG_MODES === 'undefined') return;
+
+  const state = await chrome.runtime.sendMessage({ type: 'GET_VENDOR_DEBUG' }).catch(() => null) || {};
+
+  list.innerHTML = TM_DEBUG_MODES.map(mode => {
+    const vendor = TM_VENDOR_BY_ID[mode.id];
+    const active = !!state[mode.id];
+    const color = vendor ? vendor.color : 'var(--accent-blue)';
+    return `
+      <div class="container-item" style="flex-direction:column;align-items:stretch;gap:6px;${active ? 'border-left:3px solid ' + color : ''}">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" class="vendor-debug-cb" data-mode="${escapeHtml(mode.id)}" ${active ? 'checked' : ''} style="cursor:pointer">
+          <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>
+          <span style="font-size:12px;font-weight:600">${escapeHtml(mode.label)}</span>
+        </label>
+        <div style="font-size:10px;color:var(--text-muted);padding-left:24px">${escapeHtml(mode.hint)}</div>
+        ${mode.needsValue ? `
+          <input type="text" class="vendor-debug-value" data-mode="${escapeHtml(mode.id)}"
+            placeholder="${escapeHtml(mode.valuePlaceholder || '')}" value="${escapeHtml(state[mode.id]?.value?.split('|')[0] || '')}"
+            style="margin-left:24px;padding:6px 8px;font-size:11px;font-family:monospace;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+        ` : ''}
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.vendor-debug-cb').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const id = cb.dataset.mode;
+      const valueInput = list.querySelector(`.vendor-debug-value[data-mode="${id}"]`);
+      const result = await chrome.runtime.sendMessage({
+        type: 'SET_VENDOR_DEBUG',
+        vendorId: id,
+        enabled: cb.checked,
+        value: valueInput ? valueInput.value.trim() : undefined
+      }).catch(() => null);
+
+      if (!result || result.error) {
+        cb.checked = !cb.checked;
+        showToast(result?.error || 'Could not change that debug mode', 'error');
+        return;
+      }
+      showToast(cb.checked ? 'Debug mode on — reload the page to apply' : 'Debug mode off', 'success');
+      initVendorDebugModes();
+    });
+  });
+}
+initVendorDebugModes();
+
+// ============================================
 // CSV Export (spreadsheet-friendly flat rows)
 // ============================================
 const exportCsvBtn = document.getElementById('exportCsvBtn');

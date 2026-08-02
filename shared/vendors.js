@@ -281,6 +281,149 @@
       cookies: []
     },
 
+    // ---------------- Microsoft Clarity ----------------
+    {
+      id: 'CLARITY', name: 'Microsoft Clarity', category: 'analytics', color: '#0F6CBD',
+      match: [{ host: /(^|\.)clarity\.ms$/ }],
+      accountParam: null, eventParam: null, params: {}, cookies: ['_clck', '_clsk'],
+      // project id is the last path segment of the tag URL
+      extract: function (u) {
+        var m = u.pathname.match(/\/tag\/([^/?]+)/);
+        return m ? { accountId: m[1] } : null;
+      }
+    },
+
+    // ---------------- Reddit ----------------
+    {
+      id: 'REDDIT', name: 'Reddit Pixel', category: 'social', color: '#FF4500',
+      match: [
+        { host: /(^|\.)alb\.reddit\.com$/ },
+        { host: /(^|\.)redditstatic\.com$/, path: /pixel/ }
+      ],
+      accountParam: 'id', eventParam: 'event',
+      params: { id: 'Advertiser ID', event: 'Event Name', m: 'Metadata', sh: 'Screen Height', sw: 'Screen Width' },
+      cookies: ['_rdt_uuid']
+    },
+
+    // ---------------- Quora ----------------
+    {
+      id: 'QUORA', name: 'Quora Pixel', category: 'social', color: '#B92B27',
+      match: [
+        { host: /(^|\.)q\.quora\.com$/ },
+        { host: /(^|\.)a\.quora\.com$/, path: /qevents/ }
+      ],
+      accountParam: null, eventParam: 'ev',
+      params: { ev: 'Event Name', v: 'Version', url: 'Page URL' },
+      cookies: ['m-b'],
+      extract: function (u) {
+        var m = u.pathname.match(/\/_\/ad\/([^/]+)\/pixel/);
+        return m ? { accountId: m[1] } : null;
+      }
+    },
+
+    // ---------------- Klaviyo ----------------
+    {
+      id: 'KLAVIYO', name: 'Klaviyo', category: 'analytics', color: '#232426',
+      match: [
+        { host: /(^|\.)a\.klaviyo\.com$/, path: /\/onsite\// },
+        { host: /(^|\.)static\.klaviyo\.com$/ }
+      ],
+      accountParam: 'company_id', eventParam: null,
+      params: { company_id: 'Public API Key', data: 'Payload (base64)' },
+      cookies: ['__kla_id']
+    },
+
+    // ---------------- HubSpot ----------------
+    {
+      id: 'HUBSPOT', name: 'HubSpot', category: 'analytics', color: '#FF7A59',
+      match: [
+        { host: /(^|\.)track\.hubspot\.com$/ },
+        { host: /(^|\.)js\.hs-scripts\.com$/ },
+        { host: /(^|\.)js\.hs-analytics\.net$/ }
+      ],
+      accountParam: 'k', eventParam: null,
+      params: { k: 'Portal ID', v: 'Version', a: 'Account', pu: 'Page URL', t: 'Page Title', cts: 'Timestamp' },
+      cookies: ['hubspotutk', '__hstc', '__hssc']
+    },
+
+    // ---------------- Braze ----------------
+    {
+      id: 'BRAZE', name: 'Braze', category: 'analytics', color: '#3F0EAF',
+      match: [{ host: /(^|\.)braze\.(com|eu)$/ }, { host: /(^|\.)braze-images\.com$/ }],
+      accountParam: null, eventParam: null, params: {}, cookies: ['ab.storage']
+    },
+
+    // ---------------- FullStory ----------------
+    {
+      id: 'FULLSTORY', name: 'FullStory', category: 'analytics', color: '#0A0A0A',
+      match: [
+        { host: /(^|\.)fullstory\.com$/ },
+        { host: /(^|\.)edge\.fullstory\.com$/ }
+      ],
+      accountParam: 'OrgId', eventParam: null,
+      params: { OrgId: 'Org ID' }, cookies: ['fs_uid']
+    },
+
+    // ---------------- Heap ----------------
+    {
+      id: 'HEAP', name: 'Heap', category: 'analytics', color: '#3B5AFB',
+      match: [{ host: /(^|\.)heapanalytics\.com$/ }],
+      accountParam: 'app_id', eventParam: 'ev',
+      params: { app_id: 'Environment ID', ev: 'Event Name', t: 'Page Title', u: 'Page URL' },
+      cookies: ['_hp2_id']
+    },
+
+    // ---------------- Plausible ----------------
+    {
+      id: 'PLAUSIBLE', name: 'Plausible', category: 'analytics', color: '#5850EC',
+      match: [{ host: /(^|\.)plausible\.io$/, path: /\/api\/event/ }],
+      accountParam: null, eventParam: null, bodyType: 'json', params: {}, cookies: [],
+      extractFromBody: function (body) {
+        if (!body || typeof body !== 'object') return null;
+        return { event: body.n || body.name || null, accountId: body.d || body.domain || null };
+      }
+    },
+
+    // ---------------- Piwik PRO ----------------
+    {
+      id: 'PIWIK_PRO', name: 'Piwik PRO', category: 'analytics', color: '#29334C',
+      match: [{ host: /./, path: /\/ppms\.php$/ }],
+      accountParam: 'idsite', eventParam: 'e_a',
+      params: { idsite: 'Site ID', e_c: 'Event Category', e_a: 'Event Action', e_n: 'Event Name', action_name: 'Page Title', url: 'Page URL' },
+      cookies: ['_pk_id', 'ppms']
+    },
+
+    // ---------------- Optimizely ----------------
+    {
+      id: 'OPTIMIZELY', name: 'Optimizely', category: 'testing', color: '#0037FF',
+      match: [
+        { host: /(^|\.)logx\.optimizely\.com$/ },
+        { host: /(^|\.)cdn\.optimizely\.com$/ }
+      ],
+      accountParam: null, eventParam: null, params: {}, cookies: ['optimizely']
+    },
+
+    // ---------------- VWO ----------------
+    {
+      id: 'VWO', name: 'VWO', category: 'testing', color: '#EC4C48',
+      match: [{ host: /(^|\.)visualwebsiteoptimizer\.com$/ }],
+      accountParam: 'a', eventParam: null,
+      params: { a: 'Account ID', experiment_id: 'Experiment ID', combination: 'Variation' },
+      cookies: ['_vwo_uuid', '_vis_opt']
+    },
+
+    // ---------------- Awin ----------------
+    {
+      id: 'AWIN', name: 'Awin', category: 'affiliate', color: '#FF6D2D',
+      match: [
+        { host: /(^|\.)awin1\.com$/ },
+        { host: /(^|\.)dwin1\.com$/ }
+      ],
+      accountParam: 'merchant', eventParam: 'ch',
+      params: { merchant: 'Advertiser ID', amount: 'Order Value', ref: 'Order Reference', cr: 'Currency', ch: 'Channel', parts: 'Commission Groups' },
+      cookies: ['_awin_awc']
+    },
+
     // ---------------- Adobe Analytics ----------------
     {
       id: 'ADOBE_ANALYTICS', name: 'Adobe Analytics', category: 'analytics', color: '#EB1000',
@@ -399,6 +542,71 @@
     }
   ];
 
+
+  /**
+   * Per-platform debug / test-event modes.
+   *
+   * Google gives you Tag Assistant and DebugView; the other platforms have
+   * their own equivalents, but almost none of them read a flag off the
+   * outgoing hit. They read it at init time from a cookie, from localStorage,
+   * or from the page URL. So these are applied as storage writes, not as
+   * request rewrites.
+   *
+   * kind:    'cookie' | 'localStorage'
+   * value:   fixed string, or a generator for formats the vendor validates
+   * verify:  vendors that silently ignore malformed values are marked
+   */
+  const TM_DEBUG_MODES = [
+    {
+      id: 'TIKTOK_PIXEL', kind: 'cookie', name: 'tt_test_id',
+      label: 'TikTok Test Events',
+      hint: 'Paste the Test Event code from TikTok Events Manager. Events then appear in its Test Events tab.',
+      needsValue: true, valuePlaceholder: 'TikTok test event code'
+    },
+    {
+      id: 'TEALIUM', kind: 'cookie', name: 'utagdb', value: 'true',
+      label: 'Tealium debug console',
+      hint: 'Turns on utag debug logging in the browser console.'
+    },
+    {
+      id: 'BING_UET', kind: 'cookie', name: '_uetdbg',
+      label: 'Microsoft UET debug',
+      hint: 'Adds a dbg flag to UET beacons so the UET Tag Helper can read them.',
+      // bat.js accepts a 13-digit millisecond timestamp or a UUID v4; anything
+      // else is dropped without a word
+      value: function () { return String(Date.now()); }
+    },
+    {
+      id: 'YANDEX_METRICA', kind: 'cookie', name: '_ym_debug', value: '2',
+      label: 'Yandex Metrica debug panel',
+      hint: 'Opens Metrica own on-page debug panel (counters, events, ecommerce).'
+    },
+    {
+      id: 'HOTJAR', kind: 'cookie', name: 'hjDebug', value: 'true',
+      label: 'Hotjar debug logging',
+      hint: 'Hotjar prints what it records to the console.'
+    },
+    {
+      id: 'CRITEO', kind: 'cookie', name: 'criteoTagDebugMode', value: '1',
+      label: 'Criteo tag debug',
+      hint: 'Criteo OneTag logs its events instead of staying silent.'
+    },
+    {
+      id: 'SNAP_PIXEL', kind: 'localStorage', name: '_scTestEvent',
+      label: 'Snap Test Events',
+      hint: 'Paste the Test ID from Snapchat Events Manager. Valid for one hour.',
+      needsValue: true, valuePlaceholder: 'Snap test id (UUID)',
+      // scevent.min.js stores "<uuid>|<epoch-ms>" and rejects a malformed uuid
+      format: function (v) { return v + '|' + Date.now(); },
+      validate: function (v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v); }
+    },
+    {
+      id: 'ADOBE_LAUNCH', kind: 'localStorage', name: 'com.adobe.reactor.debug', value: 'true',
+      label: 'Adobe Launch debug',
+      hint: 'Same as calling _satellite.setDebug(true) on every page.'
+    }
+  ];
+
   const TM_VENDOR_BY_ID = {};
   TM_VENDORS.forEach(function (v) { TM_VENDOR_BY_ID[v.id] = v; });
 
@@ -431,7 +639,20 @@
     MIXPANEL: { domains: ['mixpanel.com'] },
     MATOMO: { urlFilters: ['/matomo.php', '/piwik.php'] },
     YANDEX_METRICA: { domains: ['mc.yandex.ru', 'mc.yandex.com'] },
-    HOTJAR: { domains: ['hotjar.com', 'hotjar.io'] }
+    HOTJAR: { domains: ['hotjar.com', 'hotjar.io'] },
+    CLARITY: { domains: ['clarity.ms'] },
+    REDDIT: { domains: ['alb.reddit.com', 'redditstatic.com'] },
+    QUORA: { domains: ['q.quora.com', 'a.quora.com'] },
+    KLAVIYO: { domains: ['klaviyo.com'] },
+    HUBSPOT: { domains: ['track.hubspot.com', 'js.hs-scripts.com', 'js.hs-analytics.net'] },
+    BRAZE: { domains: ['braze.com', 'braze.eu'] },
+    FULLSTORY: { domains: ['fullstory.com'] },
+    HEAP: { domains: ['heapanalytics.com'] },
+    PLAUSIBLE: { domains: ['plausible.io'] },
+    PIWIK_PRO: { urlFilters: ['/ppms.php'] },
+    OPTIMIZELY: { domains: ['logx.optimizely.com', 'cdn.optimizely.com'] },
+    VWO: { domains: ['visualwebsiteoptimizer.com'] },
+    AWIN: { domains: ['awin1.com', 'dwin1.com'] }
   };
 
   // Aggregated first-party cookie prefixes across all vendors (+ sGTM cookies)
@@ -446,7 +667,9 @@
   const TM_TRACKING_COOKIE_DOMAINS = [
     'google.com', 'doubleclick.net', 'facebook.com', 'tiktok.com', 'linkedin.com',
     'adform.net', 'creativecdn.com', 'criteo.com', 'bing.com', 'pinterest.com',
-    'snapchat.com', 'twitter.com', 'x.com', 'taboola.com', 'outbrain.com'
+    'snapchat.com', 'twitter.com', 'x.com', 'taboola.com', 'outbrain.com',
+    'clarity.ms', 'reddit.com', 'quora.com', 'klaviyo.com', 'hubspot.com', 'braze.com',
+    'fullstory.com', 'heapanalytics.com', 'visualwebsiteoptimizer.com', 'awin1.com'
   ];
 
   // Registrable-domain-ish comparison (last two labels; good enough for the
@@ -539,6 +762,7 @@
   globalThis.TM_VENDORS = TM_VENDORS;
   globalThis.TM_VENDOR_BY_ID = TM_VENDOR_BY_ID;
   globalThis.TM_BLOCK_RULES = TM_BLOCK_RULES;
+  globalThis.TM_DEBUG_MODES = TM_DEBUG_MODES;
   globalThis.TM_TRACKING_COOKIE_PREFIXES = TM_TRACKING_COOKIE_PREFIXES;
   globalThis.TM_TRACKING_COOKIE_DOMAINS = TM_TRACKING_COOKIE_DOMAINS;
   globalThis.tmClassifyRequest = tmClassifyRequest;
