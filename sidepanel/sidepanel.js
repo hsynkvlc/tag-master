@@ -2082,6 +2082,9 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// Vendor marks are drawn locally — the panel makes no network requests of its own.
+const DOT = '<svg viewBox="0 0 24 24" style="width:12px;height:12px"><circle cx="12" cy="12" r="9" fill="currentColor"/></svg>';
+
 // Get request type styling (icon + color + label)
 function getRequestTypeStyle(request) {
   const url = request.url || '';
@@ -2099,18 +2102,18 @@ function getRequestTypeStyle(request) {
     };
   }
   if (request.type === 'GA4_SERVER_SIDE') {
-    return { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#F9AB00', bgColor: 'rgba(249, 171, 0, 0.1)', label: 'GA4 (sGTM)' };
+    return { icon: DOT, color: '#F9AB00', bgColor: 'rgba(249, 171, 0, 0.1)', label: 'GA4 (sGTM)' };
   }
 
   // Google types by classified type — not by URL heuristics, which mislabel
   // e.g. a conversion hit redirected to googleads.g.doubleclick.net
   const GOOGLE_TYPE_STYLES = {
-    GA4: { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' },
-    UA: { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' },
-    GOOGLE_ADS_CONVERSION: { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' },
-    GOOGLE_ADS_REMARKETING: { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' },
-    FLOODLIGHT: { icon: '<img src="https://cdn.simpleicons.org/googlecampaignmanager360/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' },
-    GTM: { icon: '<img src="https://cdn.simpleicons.org/googletagmanager/246FDB" style="width:12px;height:12px;object-fit:contain;">', color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: request.isServerSide ? 'GTM (sGTM)' : 'GTM' },
+    GA4: { icon: DOT, color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' },
+    UA: { icon: DOT, color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' },
+    GOOGLE_ADS_CONVERSION: { icon: DOT, color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' },
+    GOOGLE_ADS_REMARKETING: { icon: DOT, color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' },
+    FLOODLIGHT: { icon: DOT, color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' },
+    GTM: { icon: DOT, color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: request.isServerSide ? 'GTM (sGTM)' : 'GTM' },
     DOUBLECLICK: { icon: '<svg viewBox="0 0 24 24" fill="#EC4899" style="width:12px;height:12px"><circle cx="12" cy="12" r="8"/></svg>', color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.1)', label: 'DoubleClick' }
   };
   if (GOOGLE_TYPE_STYLES[request.type]) {
@@ -2126,7 +2129,7 @@ function getRequestTypeStyle(request) {
         for (const pattern of tech.patterns) {
           if (urlLower.includes(pattern.toLowerCase())) {
             return {
-              icon: `<img src="${tech.icon}" style="width:12px;height:12px;object-fit:contain;border-radius:2px" onerror="this.style.display='none'">`,
+              icon: DOT,
               color: 'var(--text-primary)',
               bgColor: 'var(--bg-tertiary)',
               label: tech.name
@@ -2139,32 +2142,32 @@ function getRequestTypeStyle(request) {
 
   // GA4 (Google Analytics 4)
   if (urlLower.includes('/g/collect') || urlLower.includes('google-analytics.com/g/')) {
-    return { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' };
+    return { icon: DOT, color: '#FBBC04', bgColor: 'rgba(251, 188, 4, 0.1)', label: 'GA4' };
   }
 
   // Universal Analytics (Legacy)
   if (urlLower.includes('/collect') && !urlLower.includes('/g/collect')) {
-    return { icon: '<img src="https://cdn.simpleicons.org/googleanalytics/E37400" style="width:12px;height:12px;object-fit:contain;">', color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' };
+    return { icon: DOT, color: '#FF6D01', bgColor: 'rgba(255, 109, 1, 0.1)', label: 'UA' };
   }
 
   // Google Ads Conversion
   if (urlLower.includes('googleadservices.com') || urlLower.includes('/pagead/conversion')) {
-    return { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' };
+    return { icon: DOT, color: '#34A853', bgColor: 'rgba(52, 168, 83, 0.1)', label: 'Ads Conv' };
   }
 
   // Google Ads Remarketing
   if (urlLower.includes('/pagead/1p-user-list') || urlLower.includes('google.com/pagead/')) {
-    return { icon: '<img src="https://cdn.simpleicons.org/googleads/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' };
+    return { icon: DOT, color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)', label: 'Remarketing' };
   }
 
   // Floodlight
   if (urlLower.includes('fls.doubleclick.net') || urlLower.includes('ad.doubleclick.net')) {
-    return { icon: '<img src="https://cdn.simpleicons.org/googlecampaignmanager360/4285F4" style="width:12px;height:12px;object-fit:contain;">', color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' };
+    return { icon: DOT, color: '#EA4335', bgColor: 'rgba(234, 67, 53, 0.1)', label: 'Floodlight' };
   }
 
   // GTM (Google Tag Manager) - path-based detection
   if (urlLower.includes('/gtm.js') || urlLower.includes('/gtag/js')) {
-    return { icon: '<img src="https://cdn.simpleicons.org/googletagmanager/246FDB" style="width:12px;height:12px;object-fit:contain;">', color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: 'GTM' };
+    return { icon: DOT, color: '#9334E9', bgColor: 'rgba(147, 52, 233, 0.1)', label: 'GTM' };
   }
 
   // DoubleClick (Generic)
@@ -4240,10 +4243,10 @@ async function initHitBlocker() {
     const result = await chrome.runtime.sendMessage({ type: 'SET_BLOCK_RULES', blockedVendors, ga4Debug }).catch(() => null);
     if (result) {
       showToast(blockedVendors.length
-        ? `Blocking ${blockedVendors.length} vendor(s)${ga4Debug ? ' · DebugView on' : ''}`
-        : (ga4Debug ? 'DebugView mode on' : 'All vendors unblocked'), 'success');
+        ? `Suppressing ${blockedVendors.length} vendor(s) in this tab${ga4Debug ? ' · DebugView on' : ''}`
+        : (ga4Debug ? 'DebugView mode on' : 'Suppression off'), 'success');
     } else {
-      showToast('Failed to update block rules', 'error');
+      showToast('Could not update suppression rules', 'error');
     }
   }
 

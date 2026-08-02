@@ -134,6 +134,25 @@ async function dbClear(storeName) {
   });
 }
 
+// Without unlimitedStorage the database has to stay inside the default quota,
+// so the oldest captures are dropped once the log grows past its cap.
+const MAX_STORED_REQUESTS = 5000;
+let insertsSincePrune = 0;
+
+async function pruneStoredRequests() {
+  if (!db) return;
+  try {
+    const all = await dbGetAll('networkRequests');
+    if (all.length <= MAX_STORED_REQUESTS) return;
+    const excess = all
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .slice(0, all.length - MAX_STORED_REQUESTS);
+    for (const record of excess) {
+      await dbDelete('networkRequests', record.id).catch(() => { });
+    }
+  } catch (e) { /* quota housekeeping is best effort */ }
+}
+
 // ============================================
 // Session Management
 // ============================================
@@ -279,6 +298,10 @@ function captureNetworkRequest(details, classification) {
 
   if (db && settings.preserveLog) {
     dbAdd('networkRequests', request).catch(() => { });
+    if (++insertsSincePrune >= 500) {
+      insertsSincePrune = 0;
+      pruneStoredRequests();
+    }
   }
 }
 
@@ -374,6 +397,15 @@ async function addRecentGTMId(gtmId) {
 const DEBUG_MODE_RULE_ID = 9999;
 const SGTM_PREVIEW_RULE_ID = 9998;
 
+// Rules apply only to the tab being debugged. Without a tabId condition the
+// DebugView flag would be appended to GA4 requests on every site the user
+// visits, which is not what the feature says it does — and session rules are
+// cleared on restart, the right lifetime for a debug toggle.
+async function currentDebugTabId() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab && tab.id != null ? tab.id : -1;
+}
+
 async function syncBlockRules() {
   const { tmBlockedVendors = [], tmGa4Debug = false, tmSgtmPreview = null } =
     await chrome.storage.local.get(['tmBlockedVendors', 'tmGa4Debug', 'tmSgtmPreview']);
@@ -381,6 +413,7 @@ async function syncBlockRules() {
   const rules = [];
   let id = 1;
   const resourceTypes = ['image', 'script', 'xmlhttprequest', 'ping', 'sub_frame', 'media', 'other'];
+  const tabIds = [await currentDebugTabId()];
 
   for (const vendorId of tmBlockedVendors) {
     const spec = TM_BLOCK_RULES[vendorId];
@@ -390,7 +423,7 @@ async function syncBlockRules() {
         id: id++,
         priority: 1,
         action: { type: 'block' },
-        condition: { requestDomains: spec.domains, resourceTypes }
+        condition: { requestDomains: spec.domains, resourceTypes, tabIds }
       });
     }
     if (spec.urlFilters) {
@@ -399,7 +432,7 @@ async function syncBlockRules() {
           id: id++,
           priority: 1,
           action: { type: 'block' },
-          condition: { urlFilter: filter, resourceTypes }
+          condition: { urlFilter: filter, resourceTypes, tabIds }
         });
       }
     }
@@ -418,7 +451,8 @@ async function syncBlockRules() {
       condition: {
         urlFilter: '/g/collect',
         requestDomains: ['google-analytics.com', 'analytics.google.com'],
-        resourceTypes
+        resourceTypes,
+        tabIds
       }
     });
   }
@@ -435,13 +469,14 @@ async function syncBlockRules() {
       },
       condition: {
         requestDomains: [tmSgtmPreview.domain],
-        resourceTypes: [...resourceTypes, 'main_frame']
+        resourceTypes: [...resourceTypes, 'main_frame'],
+        tabIds
       }
     });
   }
 
-  const existing = await chrome.declarativeNetRequest.getDynamicRules();
-  await chrome.declarativeNetRequest.updateDynamicRules({
+  const existing = await chrome.declarativeNetRequest.getSessionRules();
+  await chrome.declarativeNetRequest.updateSessionRules({
     removeRuleIds: existing.map(r => r.id),
     addRules: rules
   });
@@ -898,6 +933,11 @@ chrome.webRequest.onErrorOccurred.addListener(
 // ============================================
 // Tab Navigation Handling
 // ============================================
+// The panel follows the active tab, so the rules do too.
+chrome.tabs.onActivated.addListener(() => {
+  syncBlockRules().catch(() => { });
+});
+
 chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (details.frameId === 0) {
     // Clear data for this tab on refresh to avoid duplicates
@@ -943,6 +983,7 @@ async function initialize() {
     await loadSettings();
     await startSession();
     await syncBlockRules();
+    await pruneStoredRequests();
   } catch (error) {
     console.error('[Tag Master] Initialization error:', error);
   }

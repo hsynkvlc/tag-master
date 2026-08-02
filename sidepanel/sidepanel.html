@@ -214,7 +214,11 @@
         style="width:100%;max-width:280px;padding:12px;background:var(--google-blue);color:white;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;transition:background 0.2s">
         Get Started
       </button>
-      <div style="margin-top:24px;font-size:10px;color:var(--text-muted)">No account · No data collection · Everything stays on your device</div>
+      <div style="margin-top:24px;font-size:10px;color:var(--text-muted);max-width:300px;line-height:1.5">
+        Tag Master reads the tracking requests and page data of sites you inspect so it can show them to you.
+        Everything is stored locally in this browser. Nothing is sent to us or to anyone else — there is no
+        account and no server.
+      </div>
       <div id="welcomeVersion" style="margin-top:6px;font-size:10px;color:var(--text-muted)"></div>
     </div>
 
@@ -878,10 +882,10 @@
               <circle cx="12" cy="12" r="10" />
               <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
             </svg>
-            Hit Blocker
+            Hit Suppression (debug)
           </div>
           <p style="font-size:10px;color:var(--text-muted);margin:8px 0 10px">
-            Block selected vendors' tracking hits so your testing never pollutes production data.
+            Temporarily suppress a vendor's hits while you test: verify de-duplication, isolate which tag records a conversion, or reproduce a consent-denied state. Applies to the tab you are debugging.
           </p>
           <div class="container-item" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
             <div>
