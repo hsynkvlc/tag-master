@@ -4005,6 +4005,7 @@ async function runAudit() {
     });
   }
 
+  renderReconciliation();
   renderAuditResults(checks);
   elements.runAudit.textContent = 'Run Scan';
   elements.runAudit.disabled = false;
@@ -4329,6 +4330,127 @@ async function initSgtmPreview() {
   tokenInput.addEventListener('change', () => { if (enabledToggle.checked) saveSgtmPreview(); });
 }
 initSgtmPreview();
+
+// ============================================
+// Conversion reconciliation
+// Every platform reports the same purchase in its own dialect, which is why a
+// mismatch usually goes unnoticed for months. Line them up and the gaps show.
+// ============================================
+function groupConversions() {
+  const hits = networkRequests.filter(r => r.conversion);
+  if (!hits.length) return [];
+
+  // Group by order id when the platforms agree on one, otherwise by value
+  const groups = new Map();
+  for (const hit of hits) {
+    const c = hit.conversion;
+    const key = c.orderId || (c.value != null ? 'value:' + c.value : 'unknown');
+    if (!groups.has(key)) groups.set(key, { key, orderId: c.orderId, rows: [] });
+    groups.get(key).rows.push({
+      vendorId: hit.type,
+      vendor: hit.typeName,
+      event: hit.event,
+      timestamp: hit.timestamp,
+      blocked: !!hit.blocked,
+      ...c
+    });
+  }
+
+  return Array.from(groups.values()).map(group => {
+    const values = group.rows.filter(r => r.value != null).map(r => r.value);
+    const currencies = group.rows.filter(r => r.currency).map(r => r.currency);
+    const issues = [];
+
+    if (values.length > 1) {
+      const max = Math.max(...values);
+      const min = Math.min(...values);
+      // A cent of float noise is not a problem; a real difference is
+      if (max - min > 0.01) {
+        issues.push({ level: 'error', text: `Values disagree: ${min} vs ${max}` });
+      }
+    }
+    if (new Set(currencies).size > 1) {
+      issues.push({ level: 'error', text: `Currencies disagree: ${Array.from(new Set(currencies)).join(', ')}` });
+    }
+    group.rows.filter(r => r.value == null).forEach(r => {
+      issues.push({ level: 'warn', text: `${r.vendor} sent no value` });
+    });
+    group.rows.filter(r => r.value != null && !r.currency).forEach(r => {
+      issues.push({ level: 'warn', text: `${r.vendor} sent a value with no currency` });
+    });
+
+    // Same platform reporting the same order twice is a double-fire
+    const seen = new Map();
+    for (const r of group.rows) {
+      const k = r.vendorId + '|' + (r.value ?? '');
+      if (seen.has(k)) {
+        issues.push({ level: 'error', text: `${r.vendor} reported this conversion twice` });
+      }
+      seen.set(k, true);
+    }
+
+    // Platforms that were on the page but stayed silent for this conversion
+    const firedIds = new Set(group.rows.map(r => r.vendorId));
+    const onPage = new Set(networkRequests.map(r => r.type));
+    const missing = Array.from(onPage).filter(id =>
+      typeof TM_VENDOR_BY_ID !== 'undefined' &&
+      TM_VENDOR_BY_ID[id] &&
+      TM_VENDOR_BY_ID[id].category !== 'google' &&
+      TM_VENDOR_BY_ID[id].category !== 'analytics' &&
+      !firedIds.has(id));
+
+    group.missing = missing.map(id => TM_VENDOR_BY_ID[id].name);
+    group.issues = issues;
+    return group;
+  });
+}
+
+function renderReconciliation() {
+  const container = document.getElementById('reconcileResults');
+  if (!container) return;
+
+  const groups = groupConversions();
+  if (!groups.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = groups.map(group => {
+    const rows = group.rows.map(r => `
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:6px 8px;border-top:1px solid var(--border-light);font-size:11px">
+        <span style="display:flex;align-items:center;gap:6px">
+          <span style="width:7px;height:7px;border-radius:50%;background:${TM_VENDOR_BY_ID[r.vendorId]?.color || 'var(--text-muted)'}"></span>
+          ${escapeHtml(r.vendor)}${r.blocked ? ' <span style="color:var(--text-muted)">(blocked)</span>' : ''}
+        </span>
+        <span style="font-family:monospace;color:${r.value == null ? 'var(--warning-yellow)' : 'var(--text-primary)'}">${r.value == null ? 'no value' : escapeHtml(String(r.value))}</span>
+        <span style="font-family:monospace;color:${r.currency ? 'var(--text-secondary)' : 'var(--warning-yellow)'}">${escapeHtml(r.currency || '—')}</span>
+      </div>`).join('');
+
+    const issues = group.issues.map(i => `
+      <div style="font-size:10px;color:${i.level === 'error' ? 'var(--error-red)' : 'var(--warning-yellow)'};padding:2px 8px">
+        ${i.level === 'error' ? '✗' : '⚠'} ${escapeHtml(i.text)}
+      </div>`).join('');
+
+    const missing = group.missing.length ? `
+      <div style="font-size:10px;color:var(--text-muted);padding:4px 8px 0">
+        Did not report this conversion: ${group.missing.map(escapeHtml).join(', ')}
+      </div>` : '';
+
+    const border = group.issues.some(i => i.level === 'error') ? 'var(--error-red)'
+      : (group.issues.length ? 'var(--warning-yellow)' : 'var(--success-green)');
+
+    return `
+      <div class="container-item" style="flex-direction:column;align-items:stretch;gap:0;border-left:4px solid ${border};padding:10px 8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 8px 6px">
+          <span style="font-size:11px;font-weight:700">Conversion${group.orderId ? ' · ' + escapeHtml(group.orderId) : ''}</span>
+          <span style="font-size:10px;color:var(--text-muted)">${group.rows.length} platform${group.rows.length > 1 ? 's' : ''}</span>
+        </div>
+        ${rows}
+        ${issues}
+        ${missing}
+      </div>`;
+  }).join('');
+}
 
 // ============================================
 // Platform Debug Modes

@@ -214,9 +214,16 @@ function captureNetworkRequest(details, classification) {
     }
   }
 
+  // What this hit says about a conversion, in a shape shared across platforms
+  const conversion = tmReadConversion(cls.type, urlObj, {
+    json: body?.kind === 'json' ? body.data : null,
+    event: cls.event
+  });
+
   const request = {
     id: generateId(),
     timestamp: Date.now(),
+    conversion,
     type: cls.type,
     typeName: cls.name,
     typeColor: cls.color,

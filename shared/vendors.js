@@ -141,7 +141,7 @@
     {
       id: 'LINKEDIN_PIXEL', name: 'LinkedIn Insight', category: 'social', color: '#0A66C2',
       match: [
-        { host: /(^|\.)px\.ads\.linkedin\.com$/, path: /\/collect/ },
+        { host: /(^|\.)px\.ads\.linkedin\.com$/, path: /\/(collect|wa)/ },
         { host: /(^|\.)snap\.licdn\.com$/ }
       ],
       accountParam: 'pid', eventParam: 'conversionId',
@@ -607,6 +607,174 @@
     }
   ];
 
+
+  /**
+   * Normalised conversion reading.
+   *
+   * Every platform names the money differently — cd[value], sales, gv,
+   * tw_sale_amount, orderValue — which is exactly why nobody notices when one
+   * of them disagrees with the others. This maps them onto {value, currency,
+   * orderId} so the panel can line them up.
+   *
+   * conv.events: which event names count as a conversion for that platform.
+   */
+  const TM_CONVERSIONS = {
+    GA4: {
+      events: /^(purchase|refund)$/i,
+      read: function (u) {
+        return {
+          value: u.searchParams.get('epn.value') || u.searchParams.get('ep.value'),
+          currency: u.searchParams.get('cu'),
+          orderId: u.searchParams.get('ep.transaction_id')
+        };
+      }
+    },
+    GOOGLE_ADS_CONVERSION: {
+      read: function (u) {
+        return {
+          value: u.searchParams.get('value'),
+          currency: u.searchParams.get('currency_code') || u.searchParams.get('currency'),
+          orderId: u.searchParams.get('transaction_id') || u.searchParams.get('oid')
+        };
+      }
+    },
+    META_PIXEL: {
+      events: /^(purchase|subscribe|starttrial)$/i,
+      read: function (u) {
+        return {
+          value: u.searchParams.get('cd[value]'),
+          currency: u.searchParams.get('cd[currency]'),
+          orderId: u.searchParams.get('cd[order_id]') || u.searchParams.get('eid')
+        };
+      }
+    },
+    TIKTOK_PIXEL: {
+      events: /^(completepayment|place_?an_?order)$/i,
+      read: function (u, ctx) {
+        var b = ctx.json;
+        var first = b && (Array.isArray(b.batch) ? b.batch[0] : b);
+        var props = (first && first.properties) || {};
+        return {
+          value: props.value != null ? String(props.value) : null,
+          currency: props.currency || null,
+          orderId: props.order_id || (first && first.event_id) || null
+        };
+      }
+    },
+    ADFORM: {
+      read: function (u) {
+        return {
+          value: u.searchParams.get('sales'),
+          currency: u.searchParams.get('currency'),
+          orderId: u.searchParams.get('orderid')
+        };
+      }
+    },
+    BING_UET: {
+      read: function (u) {
+        return {
+          value: u.searchParams.get('gv'),
+          currency: u.searchParams.get('gc'),
+          orderId: u.searchParams.get('transaction_id')
+        };
+      }
+    },
+    SNAP_PIXEL: {
+      events: /^purchase$/i,
+      read: function (u) {
+        return {
+          value: u.searchParams.get('e_pr'),
+          currency: u.searchParams.get('e_cur'),
+          orderId: u.searchParams.get('e_tid')
+        };
+      }
+    },
+    TWITTER_PIXEL: {
+      read: function (u) {
+        return {
+          value: u.searchParams.get('tw_sale_amount'),
+          currency: u.searchParams.get('tw_currency'),
+          orderId: u.searchParams.get('tw_order_id') || u.searchParams.get('event_id')
+        };
+      }
+    },
+    TABOOLA: {
+      read: function (u) {
+        return {
+          value: u.searchParams.get('revenue'),
+          currency: u.searchParams.get('currency'),
+          orderId: u.searchParams.get('orderid')
+        };
+      }
+    },
+    OUTBRAIN: {
+      read: function (u) {
+        return {
+          value: u.searchParams.get('orderValue'),
+          currency: u.searchParams.get('currency'),
+          orderId: u.searchParams.get('orderId')
+        };
+      }
+    },
+    AWIN: {
+      read: function (u) {
+        return {
+          value: u.searchParams.get('amount'),
+          currency: u.searchParams.get('cr'),
+          orderId: u.searchParams.get('ref')
+        };
+      }
+    },
+    PINTEREST: {
+      events: /^checkout$/i,
+      read: function (u) {
+        try {
+          var ed = JSON.parse(u.searchParams.get('ed') || '{}');
+          return {
+            value: ed.value != null ? String(ed.value) : null,
+            currency: ed.currency || null,
+            orderId: ed.order_id || null
+          };
+        } catch (e) { return {}; }
+      }
+    },
+    RTB_HOUSE: {
+      // id=pr_<hash>_orderstatus2_<value>_<currency>_<ids>
+      read: function (u) {
+        var id = u.searchParams.get('id') || '';
+        var m = id.match(/orderstatus2?_([\d.]+)_([A-Z]{3})_?(.*)$/i);
+        return m ? { value: m[1], currency: m[2].toUpperCase(), orderId: m[3] || null } : {};
+      }
+    }
+  };
+
+  /**
+   * Pull the conversion out of a request, if it is one.
+   * @param {string} vendorId
+   * @param {URL} u
+   * @param {{json?: object, event?: string}} ctx
+   */
+  function tmReadConversion(vendorId, u, ctx) {
+    var spec = TM_CONVERSIONS[vendorId];
+    if (!spec) return null;
+    if (spec.events && ctx && ctx.event && !spec.events.test(String(ctx.event))) return null;
+
+    var out;
+    try {
+      out = spec.read(u, ctx || {});
+    } catch (e) {
+      return null;
+    }
+    if (!out || (out.value == null && out.orderId == null)) return null;
+
+    var value = out.value == null ? null : parseFloat(String(out.value).replace(',', '.'));
+    return {
+      value: isNaN(value) ? null : value,
+      currency: out.currency ? String(out.currency).toUpperCase() : null,
+      orderId: out.orderId ? String(out.orderId) : null
+    };
+  }
+
   const TM_VENDOR_BY_ID = {};
   TM_VENDORS.forEach(function (v) { TM_VENDOR_BY_ID[v.id] = v; });
 
@@ -763,6 +931,7 @@
   globalThis.TM_VENDOR_BY_ID = TM_VENDOR_BY_ID;
   globalThis.TM_BLOCK_RULES = TM_BLOCK_RULES;
   globalThis.TM_DEBUG_MODES = TM_DEBUG_MODES;
+  globalThis.tmReadConversion = tmReadConversion;
   globalThis.TM_TRACKING_COOKIE_PREFIXES = TM_TRACKING_COOKIE_PREFIXES;
   globalThis.TM_TRACKING_COOKIE_DOMAINS = TM_TRACKING_COOKIE_DOMAINS;
   globalThis.tmClassifyRequest = tmClassifyRequest;
