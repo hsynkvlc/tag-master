@@ -857,6 +857,36 @@ async function handleMessage(message, sender) {
       });
       return await syncBlockRules();
 
+
+    // A baseline is what this page's tracking looked like when it was known
+    // good. Comparing a later visit against it answers the question people
+    // actually have after a release: did we quietly lose a tag?
+    case 'SAVE_BASELINE': {
+      const stored = await chrome.storage.local.get('tmBaselines');
+      const baselines = stored.tmBaselines || {};
+      baselines[message.key] = {
+        savedAt: Date.now(),
+        url: message.url,
+        tags: message.tags
+      };
+      await chrome.storage.local.set({ tmBaselines: baselines });
+      return { success: true, count: message.tags.length };
+    }
+
+    case 'GET_BASELINE': {
+      const stored = await chrome.storage.local.get('tmBaselines');
+      const baselines = stored.tmBaselines || {};
+      return message.key ? (baselines[message.key] || null) : baselines;
+    }
+
+    case 'DELETE_BASELINE': {
+      const stored = await chrome.storage.local.get('tmBaselines');
+      const baselines = stored.tmBaselines || {};
+      delete baselines[message.key];
+      await chrome.storage.local.set({ tmBaselines: baselines });
+      return { success: true };
+    }
+
     case 'GET_BLOCK_RULES': {
       const stored = await chrome.storage.local.get(['tmBlockedVendors', 'tmGa4Debug']);
       return {

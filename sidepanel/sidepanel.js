@@ -4038,6 +4038,7 @@ async function runAudit() {
     });
   }
 
+  renderBaseline();
   renderReconciliation();
   renderAuditResults(checks);
   elements.runAudit.textContent = 'Run Scan';
@@ -4363,6 +4364,131 @@ async function initSgtmPreview() {
   tokenInput.addEventListener('change', () => { if (enabledToggle.checked) saveSgtmPreview(); });
 }
 initSgtmPreview();
+
+// ============================================
+// Tracking baseline
+// The expensive failure in this job is silent: a release ships, one tag stops
+// firing, and nobody notices until the monthly report looks wrong. A baseline
+// turns that into a diff.
+// ============================================
+function baselineKeyFor(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname + u.pathname.replace(/\/$/, '');
+  } catch (e) {
+    return null;
+  }
+}
+
+// What we compare on: which platform, which event, which account. Values move
+// around legitimately between visits; these three should not.
+function currentTagFingerprints() {
+  const seen = new Map();
+  for (const req of networkRequests) {
+    if (req.blocked) continue;
+    const key = [req.type, req.event || '', req.accountId || ''].join('|');
+    if (!seen.has(key)) {
+      seen.set(key, { type: req.type, name: req.typeName, event: req.event || null, accountId: req.accountId || null });
+    }
+  }
+  return Array.from(seen.values());
+}
+
+function diffAgainstBaseline(baseline, current) {
+  const keyOf = t => [t.type, t.event || '', t.accountId || ''].join('|');
+  const baseKeys = new Map(baseline.map(t => [keyOf(t), t]));
+  const currKeys = new Map(current.map(t => [keyOf(t), t]));
+
+  const missing = baseline.filter(t => !currKeys.has(keyOf(t)));
+  const added = current.filter(t => !baseKeys.has(keyOf(t)));
+
+  // A tag whose platform and event still match but whose account changed is
+  // the nastiest case: it fires, it looks healthy, and the data lands in the
+  // wrong property.
+  const rekeyed = [];
+  for (const gone of missing) {
+    const twin = added.find(a => a.type === gone.type && (a.event || '') === (gone.event || '') && a.accountId !== gone.accountId);
+    if (twin) rekeyed.push({ from: gone, to: twin });
+  }
+  const rekeyedKeys = new Set(rekeyed.flatMap(r => [keyOf(r.from), keyOf(r.to)]));
+
+  return {
+    missing: missing.filter(t => !rekeyedKeys.has(keyOf(t))),
+    added: added.filter(t => !rekeyedKeys.has(keyOf(t))),
+    rekeyed
+  };
+}
+
+async function renderBaseline() {
+  const box = document.getElementById('baselineResults');
+  if (!box) return;
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const key = tab?.url ? baselineKeyFor(tab.url) : null;
+  if (!key) { box.innerHTML = ''; return; }
+
+  const baseline = await chrome.runtime.sendMessage({ type: 'GET_BASELINE', key }).catch(() => null);
+  if (!baseline) {
+    box.innerHTML = `<div style="font-size:10px;color:var(--text-muted)">No baseline saved for ${escapeHtml(key)} yet.</div>`;
+    return;
+  }
+
+  const current = currentTagFingerprints();
+  const { missing, added, rekeyed } = diffAgainstBaseline(baseline.tags, current);
+  const when = new Date(baseline.savedAt).toLocaleDateString();
+
+  const line = (t, colour, label) => `
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 0;color:${colour}">
+      <span style="width:7px;height:7px;border-radius:50%;background:${TM_VENDOR_BY_ID[t.type]?.color || 'var(--text-muted)'};flex-shrink:0"></span>
+      <span>${label} <strong>${escapeHtml(t.name || t.type)}</strong>${t.event ? ' · ' + escapeHtml(t.event) : ''}${t.accountId ? ' · ' + escapeHtml(t.accountId) : ''}</span>
+    </div>`;
+
+  const parts = [];
+  if (!missing.length && !added.length && !rekeyed.length) {
+    parts.push(`<div style="font-size:11px;color:var(--success-green)">✓ Matches the baseline saved on ${escapeHtml(when)} — ${baseline.tags.length} tags, all still firing.</div>`);
+  } else {
+    if (missing.length) {
+      parts.push(`<div style="font-size:11px;font-weight:600;color:var(--error-red);margin-top:4px">Stopped firing since ${escapeHtml(when)}</div>`);
+      parts.push(missing.map(t => line(t, 'var(--error-red)', '✗')).join(''));
+    }
+    if (rekeyed.length) {
+      parts.push('<div style="font-size:11px;font-weight:600;color:var(--warning-yellow);margin-top:6px">Now reporting to a different account</div>');
+      parts.push(rekeyed.map(r => `
+        <div style="font-size:11px;padding:3px 0;color:var(--warning-yellow)">
+          ⚠ <strong>${escapeHtml(r.from.name || r.from.type)}</strong>${r.from.event ? ' · ' + escapeHtml(r.from.event) : ''}:
+          ${escapeHtml(r.from.accountId || 'none')} → ${escapeHtml(r.to.accountId || 'none')}
+        </div>`).join(''));
+    }
+    if (added.length) {
+      parts.push('<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-top:6px">New since the baseline</div>');
+      parts.push(added.map(t => line(t, 'var(--text-secondary)', '+')).join(''));
+    }
+  }
+
+  parts.push(`<button class="btn btn-secondary btn-small" id="clearBaseline" style="margin-top:8px;font-size:10px">Forget this baseline</button>`);
+  box.innerHTML = parts.join('');
+
+  document.getElementById('clearBaseline')?.addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({ type: 'DELETE_BASELINE', key });
+    showToast('Baseline removed', 'success');
+    renderBaseline();
+  });
+}
+
+document.getElementById('saveBaseline')?.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const key = tab?.url ? baselineKeyFor(tab.url) : null;
+  if (!key) { showToast('Open the page you want to baseline first', 'error'); return; }
+
+  const tags = currentTagFingerprints();
+  if (!tags.length) {
+    showToast('No tags captured yet — reload the page first', 'error');
+    return;
+  }
+  const res = await chrome.runtime.sendMessage({ type: 'SAVE_BASELINE', key, url: tab.url, tags }).catch(() => null);
+  showToast(res?.success ? `Baseline saved: ${tags.length} tags on ${key}` : 'Could not save the baseline', res?.success ? 'success' : 'error');
+  renderBaseline();
+});
 
 // ============================================
 // Conversion reconciliation
