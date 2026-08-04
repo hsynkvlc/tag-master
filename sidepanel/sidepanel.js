@@ -1564,13 +1564,38 @@ function flattenObject(obj, prefix = '') {
   return result;
 }
 
+// GTM's own lifecycle pushes and the ecommerce reset are noise for someone
+// looking for their own events; four of them arrive on every page load.
+const GTM_INTERNAL_EVENTS = new Set(['gtm.js', 'gtm.dom', 'gtm.load', 'gtm.init', 'gtm.init_consent', 'gtm.scrollDepth', 'gtm.historyChange', 'gtm.click', 'gtm.linkClick', 'gtm.formSubmit', 'gtm.video', 'gtm.timer', 'gtm.triggerGroup', 'gtm.elementVisibility']);
+
+function isEcommerceReset(entry) {
+  const data = entry?.data?.data || entry?.data || {};
+  return data && Object.keys(data).length === 1 && 'ecommerce' in data && data.ecommerce === null;
+}
+
 function renderEvents() {
   const filter = elements.eventFilter.value.toLowerCase().trim();
 
+  // STEP 0: Scope. Events are kept across navigations on purpose, so without
+  // this the same event from before a reload sits next to the new one.
+  let events0 = events;
+  const onlyThisLoad = document.getElementById('onlyThisLoad');
+  if (onlyThisLoad?.checked) {
+    const loads = events.map(e => e.pageLoad).filter(n => typeof n === 'number');
+    if (loads.length) {
+      const latest = Math.max(...loads);
+      events0 = events.filter(e => e.pageLoad === latest);
+    }
+  }
+  const hideInternals = document.getElementById('hideGtmInternals');
+  if (hideInternals?.checked) {
+    events0 = events0.filter(e => !GTM_INTERNAL_EVENTS.has(e.event) && !isEcommerceReset(e));
+  }
+
   // STEP 1: Filter by selected page
-  let filteredByPage = events;
+  let filteredByPage = events0;
   if (selectedPageFilter !== null) {
-    filteredByPage = events.filter(e => {
+    filteredByPage = events0.filter(e => {
       const data = e.data?.data || e.data || e;
       let urlStr = e.pageUrl || data.url || e.url || data.page_location || data.dl;
 
@@ -2028,6 +2053,11 @@ elements.clearEvents.addEventListener('click', () => {
   renderPageNavigation();
   renderEvents();
   updateEventsPanelTitle();
+});
+
+['onlyThisLoad', 'hideGtmInternals'].forEach(id => {
+  const box = document.getElementById(id);
+  if (box) box.addEventListener('change', () => { renderPageNavigation(); renderEvents(); updateEventsPanelTitle(); });
 });
 
 async function loadEvents() {

@@ -399,6 +399,14 @@
                     <polyline points="2 12 12 17 22 12"></polyline>
                   </svg>
                   <span id="eventsPanelTitle">DataLayer Events</span>
+                <span id="eventScopeBar" style="display:flex;align-items:center;gap:10px;margin-left:auto;font-size:10px;font-weight:400;color:var(--text-muted)">
+                  <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Events from earlier page loads stay in the log; this shows only the current one">
+                    <input type="checkbox" id="onlyThisLoad" checked style="cursor:pointer">This page load
+                  </label>
+                  <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="gtm.js, gtm.dom, gtm.load and ecommerce reset pushes">
+                    <input type="checkbox" id="hideGtmInternals" checked style="cursor:pointer">Hide GTM internals
+                  </label>
+                </span>
                 </div>
                 <div style="display:flex;gap:4px">
 

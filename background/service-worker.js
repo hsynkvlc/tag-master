@@ -316,6 +316,11 @@ function updateNetworkRequest(tabId, requestId, updates) {
   }
 }
 
+// Which page load an event belongs to. Events are deliberately kept across
+// navigations, so without this the same add_to_cart from before a reload sits
+// next to the new one and reads as a duplicate.
+const tabPageLoads = {};
+
 // ============================================
 // DataLayer Event Handling
 // ============================================
@@ -328,6 +333,7 @@ async function handleDataLayerEvent(event, sender) {
     timestamp: Date.now(),
     pageUrl: sender.tab?.url || event.pageUrl,
     tabId: tabId,
+    pageLoad: tabPageLoads[tabId] || 1,
     event: event.eventName,
     data: event.data
   };
@@ -871,6 +877,11 @@ async function handleMessage(message, sender) {
       return null;
     }
 
+    case 'PAGE_LOAD_GET': {
+      const [plTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return { pageLoad: plTab ? (tabPageLoads[plTab.id] || 1) : 1 };
+    }
+
     case 'GA4_SESSION_GET':
       const [sessionTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       return sessionTab ? (tabSessions[sessionTab.id] || null) : null;
@@ -940,6 +951,9 @@ chrome.tabs.onActivated.addListener(() => {
 
 chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (details.frameId === 0) {
+    // A new document means a new dataLayer, so later events belong to a new load
+    tabPageLoads[details.tabId] = (tabPageLoads[details.tabId] || 1) + 1;
+
     // Clear data for this tab on refresh to avoid duplicates
     // We do this at onCommitted (earliest point for new document)
     // DISABLED CLEARING to preserve history across navigations per user request
@@ -950,7 +964,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
     // Broadcast TAB_UPDATED for UI responsiveness
     broadcastMessage({
       type: MESSAGE_TYPES.TAB_UPDATED,
-      data: { url: details.url, tabId: details.tabId }
+      data: { url: details.url, tabId: details.tabId, pageLoad: tabPageLoads[details.tabId] }
     });
   }
 });
